@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PC방 관리">
+<title>PC방 관리자</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 로그인 -->
+  <section id="login" class="login hidden">
+    <form id="loginForm" class="login-card">
+      <div class="logo">🖥️</div>
+      <h1>PC방 관리자</h1>
+      <div id="cfgFields">
+        <label>Supabase 프로젝트 주소</label>
+        <input id="cfgUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+        <label>Supabase 공개 키 (anon key)</label>
+        <input id="cfgKey" autocomplete="off">
+      </div>
+      <label>관리자 이메일</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label>비밀번호</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <div class="err" id="loginErr"></div>
+      <button class="btn primary wide" id="loginBtn">로그인</button>
+      <button type="button" class="link" id="editCfg">Supabase 정보 다시 입력</button>
+    </form>
+  </section>
+
+  <!-- 본 화면 -->
+  <section id="app" class="hidden">
+    <header class="top">
+      <div class="brand">🖥️ PC방 관리자</div>
+      <div class="top-right">
+        <span id="conn" class="conn bad">연결 중</span>
+        <button class="icon-btn" id="notifyBtn" title="알림 켜기">🔕</button>
+        <button class="icon-btn" id="logout" title="로그아웃">⎋</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="seats" class="on"><span>🖥️</span>좌석</button>
+      <button data-tab="orders"><span>🍜</span>주문<b class="badge" id="orderBadge"></b></button>
+      <button data-tab="chats"><span>💬</span>채팅<b class="badge" id="chatBadge"></b></button>
+      <button data-tab="menu"><span>📋</span>메뉴</button>
+    </nav>
+
+    <main>
+      <div class="pane on" id="pane-seats">
+        <div class="toolbar">
+          <div class="summary" id="summary"></div>
+          <div class="toolbar-btns">
+            <button class="btn small" id="lockAll">전체 잠금</button>
+          </div>
+        </div>
+        <div class="grid" id="seats"></div>
+        <p class="empty hidden" id="noSeats">아직 등록된 손님 PC가 없습니다.<br>손님 PC에 프로그램을 설치하고 설정을 마치면 여기에 나타납니다.</p>
+      </div>
+
+      <div class="pane" id="pane-orders">
+        <div class="toolbar"><div class="summary" id="orderSummary"></div>
+          <label class="chk"><input type="checkbox" id="showDone"> 완료/취소 보기</label></div>
+        <div id="orders" class="list"></div>
+      </div>
+
+      <div class="pane" id="pane-chats">
+        <div id="chatList" class="list"></div>
+      </div>
+
+      <div class="pane" id="pane-menu">
+        <div class="toolbar"><div class="summary">손님 PC 주문 화면에 바로 반영됩니다.</div>
+          <button class="btn small primary" id="addMenu">+ 메뉴 추가</button></div>
+        <div id="menuList" class="list"></div>
+      </div>
+    </main>
+  </section>
+
+  <!-- 좌석 상세 -->
+  <div class="modal hidden" id="seatModal">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div><b id="mName">PC</b> <span id="mStatus" class="pill"></span></div>
+        <button class="icon-btn" id="mClose">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="live" id="mLive"><img id="mFrame" alt=""><span id="mLiveMsg">화면 불러오는 중…</span></div>
+        <div class="remain"><span>남은 시간</span><b id="mRemain">-</b></div>
+        <div class="pending hidden" id="mPending"></div>
+        <div class="ctl-title">시간 충전</div>
+        <div class="ctl">
+          <button class="btn" data-add="30">+30분</button>
+          <button class="btn" data-add="60">+1시간</button>
+          <button class="btn" data-add="120">+2시간</button>
+          <button class="btn" data-add="180">+3시간</button>
+        </div>
+        <div class="ctl custom">
+          <input type="number" id="mMin" placeholder="분 (빼려면 -10)" inputmode="numeric">
+          <button class="btn" id="mAddCustom">적용</button>
+          <button class="btn" id="mFree">자유 이용</button>
+        </div>
+        <div class="ctl-title">제어</div>
+        <div class="ctl">
+          <button class="btn" data-cmd="lock">🔒 잠금</button>
+          <button class="btn" data-cmd="unlock">🔓 잠금 해제</button>
+          <button class="btn warn" data-cmd="endSession">사용 종료</button>
+        </div>
+        <div class="ctl">
+          <button class="btn danger" data-cmd="restart">🔄 재시작</button>
+          <button class="btn danger" data-cmd="shutdown">⏻ PC 끄기</button>
+        </div>
+        <div class="ctl custom">
+          <input id="mNotice" placeholder="손님 화면에 띄울 공지" maxlength="300">
+          <button class="btn" id="mSendNotice">공지</button>
+        </div>
+        <div class="ctl-title">채팅</div>
+        <div class="chat" id="mChat"></div>
+        <form class="chat-send" id="mChatForm"><input id="mChatText" placeholder="메시지 입력" maxlength="500" autocomplete="off"><button class="btn primary">보내기</button></form>
+        <div class="ctl-title">좌석 관리</div>
+        <div class="ctl custom">
+          <input id="mRename" placeholder="새 이름" maxlength="30">
+          <button class="btn" id="mRenameBtn">이름 변경</button>
+          <button class="btn danger" id="mDelete">삭제</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 채팅 단독 -->
+  <div class="modal hidden" id="chatModal">
+    <div class="sheet">
+      <div class="sheet-head"><b id="cName">채팅</b><button class="icon-btn" id="cClose">✕</button></div>
+      <div class="sheet-body chat-only">
+        <div class="chat" id="cChat"></div>
+        <form class="chat-send" id="cChatForm"><input id="cChatText" placeholder="메시지 입력" maxlength="500" autocomplete="off"><button class="btn primary">보내기</button></form>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <script src="vendor/supabase-2.118.0.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

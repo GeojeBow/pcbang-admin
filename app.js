@@ -416,14 +416,77 @@ function renderOrders() {
 }
 
 // ---------- 메뉴 ----------
+// 메뉴 이름으로 어울리는 그림과 색을 고른다 (사진이 없을 때)
+const MENU_ART = [
+  [/라면|라멘|우동|국수|짬뽕/, '🍜', ['#fde68a', '#f97316']],
+  [/콜라|사이다|탄산|환타|펩시/, '🥤', ['#fecaca', '#dc2626']],
+  [/커피|아메리카노|라떼|카페/, '☕', ['#e7d3c1', '#92400e']],
+  [/주스|에이드|스무디/, '🧃', ['#fef08a', '#65a30d']],
+  [/물|생수/, '💧', ['#bae6fd', '#0284c7']],
+  [/과자|스낵|칩/, '🍪', ['#fde68a', '#b45309']],
+  [/핫도그|소시지/, '🌭', ['#fed7aa', '#c2410c']],
+  [/햄버거|버거/, '🍔', ['#fde68a', '#a16207']],
+  [/피자/, '🍕', ['#fecaca', '#ea580c']],
+  [/치킨|닭/, '🍗', ['#fed7aa', '#b45309']],
+  [/감자|튀김|프라이/, '🍟', ['#fef08a', '#dc2626']],
+  [/밥|덮밥|볶음밥|김밥/, '🍚', ['#e2e8f0', '#475569']],
+  [/떡볶이/, '🌶️', ['#fecaca', '#b91c1c']],
+  [/만두/, '🥟', ['#f5f5f4', '#78716c']],
+  [/아이스티|티$|녹차|홍차|밀크티/, '🧋', ['#fef3c7', '#b45309']],
+  [/아이스크림|빙수|콘$/, '🍦', ['#e0f2fe', '#7c3aed']],
+  [/초코|초콜릿/, '🍫', ['#e7d3c1', '#78350f']],
+  [/빵|샌드위치|토스트/, '🥪', ['#fef3c7', '#a16207']],
+  [/에너지|핫식스|레드불|몬스터/, '⚡', ['#d9f99d', '#15803d']],
+  [/맥주|음료/, '🥤', ['#ddd6fe', '#6d28d9']],
+];
+function menuArt(name) {
+  for (const [re, emoji, colors] of MENU_ART) if (re.test(name || '')) return { emoji, colors };
+  return { emoji: '🍽️', colors: ['#e0e7ff', '#4f46e5'] };
+}
+function menuPic(m) {
+  if (m.image && /^data:image\//.test(m.image)) return `<img src="${m.image}" alt="">`;
+  const a = menuArt(m.name);
+  return `<span style="background:linear-gradient(135deg, ${a.colors[0]}, ${a.colors[1]})">${a.emoji}</span>`;
+}
+// 사진을 정사각형 400px JPEG로 줄여서 메뉴에 바로 저장한다 (약 30~60KB)
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 400, c = document.createElement('canvas');
+      c.width = c.height = size;
+      const r = Math.max(size / img.width, size / img.height);
+      const w = img.width * r, h = img.height * r;
+      c.getContext('2d').drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => reject(new Error('이미지를 읽을 수 없습니다.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function saveMenuImage(id, image) {
+  const { error } = await sb.from('menu').update({ image }).eq('id', id);
+  if (error) return toast(/image/.test(error.message) ? '사진 기능을 쓰려면 Supabase에서 SQL 한 줄을 먼저 실행해야 합니다. (설치 안내 참고)' : error.message);
+  const m = S.menu.find((x) => String(x.id) === String(id));
+  if (m) { m.image = image; renderMenu(); }
+  toast(image ? '사진을 저장했습니다.' : '사진을 지웠습니다.');
+}
 function renderMenu() {
   $('#menuList').innerHTML = S.menu.map((m) => `
     <div class="row" data-m="${m.id}">
+      <label class="mpic" title="사진 바꾸기">${menuPic(m)}<input type="file" accept="image/*" data-img="${m.id}" hidden></label>
       <div class="grow"><input value="${esc(m.name)}" data-f="name" maxlength="40"></div>
       <input class="price" type="number" min="0" step="100" value="${m.price}" data-f="price">
       <label class="chk"><input type="checkbox" data-f="sold_out" ${m.sold_out ? 'checked' : ''}> 품절</label>
+      ${m.image ? `<button class="btn small" data-noimg="${m.id}">사진 지우기</button>` : ''}
       <button class="btn small danger" data-del="${m.id}">삭제</button>
     </div>`).join('') || '<p class="empty">메뉴가 없습니다.</p>';
+  $$('[data-img]').forEach((inp) => (inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    try { await saveMenuImage(inp.dataset.img, await shrinkImage(f)); } catch (e) { toast(e.message); }
+  }));
+  $$('[data-noimg]').forEach((b) => (b.onclick = () => saveMenuImage(b.dataset.noimg, null)));
   $$('[data-m] [data-f]').forEach((inp) => (inp.onchange = async () => {
     const id = inp.closest('[data-m]').dataset.m, f = inp.dataset.f;
     const v = f === 'sold_out' ? inp.checked : f === 'price' ? Math.max(0, parseInt(inp.value, 10) || 0) : inp.value.trim();

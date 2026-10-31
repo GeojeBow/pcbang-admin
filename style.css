@@ -58,7 +58,7 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .summary { color: var(--muted); font-size: 14px; }
-.chk { font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.chk { font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .empty { color: var(--muted); text-align: center; margin-top: 60px; line-height: 1.7; }
 
 /* 좌석 카드 */
@@ -86,6 +86,9 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .row .acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .row input { width: 100%; }
 .row .price { width: 110px; }
+.mpic { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; cursor: pointer; flex: none; position: relative; }
+.mpic img, .mpic span { width: 100%; height: 100%; object-fit: cover; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.mpic::after { content: "📷"; position: absolute; right: 2px; bottom: 2px; font-size: 13px; background: rgba(255,255,255,.85); border-radius: 6px; padding: 0 3px; }
 .st { font-weight: 700; font-size: 13px; } .st.new { color: var(--primary); } .st.making { color: var(--warn); } .st.done { color: var(--ok); } .st.canceled { color: var(--muted); }
 
 /* 모달 */

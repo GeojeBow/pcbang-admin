@@ -60,7 +60,7 @@ $('#editCfg').onclick = () => { $('#cfgFields').classList.remove('hidden'); $('#
 
 $('#loginForm').onsubmit = async (e) => {
   e.preventDefault();
-  const url = $('#cfgUrl').value.trim().replace(/\/+$/, '');
+  const url = $('#cfgUrl').value.trim().replace(/\/(rest|auth|realtime)\/v1.*$/, '').replace(/\/+$/, '');
   const key = $('#cfgKey').value.trim();
   if (!/^https?:\/\/.+/.test(url) || !key) { $('#loginErr').textContent = 'Supabase 주소와 공개 키를 입력하세요.'; $('#cfgFields').classList.remove('hidden'); return; }
   $('#loginBtn').disabled = true; $('#loginErr').textContent = '';

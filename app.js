@@ -585,6 +585,26 @@ $('#notifyBtn').onclick = async () => {
   toast(p === 'granted' ? '알림을 켰습니다.' : '알림이 허용되지 않았습니다.');
 };
 
+// ---------- 새 버전 자동 반영 ----------
+// 화면 파일(app.js, index.html)이 바뀌면 다시 불러온다. 앱/홈 화면 아이콘에서도 저절로 최신이 된다.
+let shellSig = null;
+async function shellSignature() {
+  const texts = await Promise.all(['app.js', 'index.html', 'style.css'].map((f) => fetch(f + '?t=' + Date.now(), { cache: 'no-store' }).then((r) => r.text())));
+  let h = 0;
+  for (const t of texts) for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+  return h;
+}
+async function checkNewVersion() {
+  try {
+    const sig = await shellSignature();
+    if (shellSig === null) shellSig = sig;
+    else if (sig !== shellSig && !S.openSeat && !S.openChat) location.reload();
+  } catch {}
+}
+checkNewVersion();
+setInterval(checkNewVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewVersion(); });
+
 // ---------- 시작 ----------
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 updateNotifyBtn();

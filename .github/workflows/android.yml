@@ -23,7 +23,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14.3'
-      - name: Decrypt signing key
+      - name: Prepare signing key
         working-directory: android
         env:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -33,7 +33,19 @@ jobs:
             gradle --no-daemon assembleDebug
             echo "::error::저장소 Settings > Secrets 에 ANDROID_KEY_PASSWORD 를 넣어 주세요"; exit 1
           fi
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in release.keystore.enc -out release.keystore -pass env:ANDROID_KEY_PASSWORD
+          if [ ! -f release.keystore.enc ]; then
+            # 첫 빌드: 서명 키를 만들고, Secret 비밀번호로 암호화해서 저장소에 보관한다
+            keytool -genkeypair -keystore release.keystore -storepass "$ANDROID_KEY_PASSWORD" -keypass "$ANDROID_KEY_PASSWORD" \
+              -alias pcbang -keyalg RSA -keysize 2048 -validity 36500 -dname "CN=PCbang Admin, O=Home, C=KR"
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in release.keystore -out release.keystore.enc -pass env:ANDROID_KEY_PASSWORD
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add release.keystore.enc
+            git commit -m "안드로이드 서명 키 보관 (암호화)"
+            git push
+          else
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in release.keystore.enc -out release.keystore -pass env:ANDROID_KEY_PASSWORD
+          fi
       - name: Build APK
         working-directory: android
         env:

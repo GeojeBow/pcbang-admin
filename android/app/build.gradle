@@ -19,7 +19,7 @@ android {
 
     signingConfigs {
         release {
-            // 서명 키는 암호화되어 저장소에 있고, 비밀번호는 GitHub Secret(ANDROID_KEY_PASSWORD)에만 있다
+            // 서명 키는 첫 빌드 때 만들어져 암호화된 채 저장소에 있고, 비밀번호는 GitHub Secret(ANDROID_KEY_PASSWORD)에만 있다
             storeFile rootProject.file('release.keystore')
             storePassword System.getenv('ANDROID_KEY_PASSWORD')
             keyAlias 'pcbang'

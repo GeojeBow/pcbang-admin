@@ -94,21 +94,29 @@
         <div class="remain"><span>남은 시간</span><b id="mRemain">-</b></div>
         <div class="pending hidden" id="mPending"></div>
         <div class="ctl-title">시간 충전</div>
-        <div class="ctl">
+        <div class="ctl quick">
           <button class="btn" data-add="30">+30분</button>
           <button class="btn" data-add="60">+1시간</button>
           <button class="btn" data-add="120">+2시간</button>
           <button class="btn" data-add="180">+3시간</button>
         </div>
-        <div class="ctl custom">
-          <input type="number" id="mMin" placeholder="분 (빼려면 -10)" inputmode="numeric">
-          <button class="btn" id="mAddCustom">적용</button>
-          <button class="btn" id="mFree">자유 이용</button>
+        <div class="ctl-title">시간 조정 (원하는 만큼 맞춘 뒤 충전 또는 빼기)</div>
+        <div class="adj">
+          <button class="btn" data-step="-60">−1시간</button>
+          <button class="btn" data-step="-10">−10분</button>
+          <button class="adj-val" id="mAdjVal" title="눌러서 직접 입력">30분</button>
+          <button class="btn" data-step="10">+10분</button>
+          <button class="btn" data-step="60">+1시간</button>
+        </div>
+        <div class="ctl act">
+          <button class="btn primary" id="mAdjAdd">＋ 30분 충전</button>
+          <button class="btn warn" id="mAdjSub">－ 30분 빼기</button>
         </div>
         <div class="ctl-title">제어</div>
-        <div class="ctl">
+        <div class="ctl ctl4">
           <button class="btn" data-cmd="lock">🔒 잠금</button>
           <button class="btn" data-cmd="unlock">🔓 잠금 해제</button>
+          <button class="btn" id="mFree">♾️ 자유 이용</button>
           <button class="btn warn" data-cmd="endSession">사용 종료</button>
         </div>
         <div class="ctl">

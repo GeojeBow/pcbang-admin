@@ -315,11 +315,26 @@ function renderModal() {
 }
 
 $$('[data-add]').forEach((b) => (b.onclick = () => command(S.openSeat, 'addTime', b.dataset.add)));
-$('#mAddCustom').onclick = () => {
-  const n = parseInt($('#mMin').value, 10);
-  if (!n) return toast('분을 숫자로 입력하세요.');
-  command(S.openSeat, 'addTime', n); $('#mMin').value = '';
+// 시간 조정: 버튼으로 양을 맞추고 충전/빼기 (핸드폰에서 마이너스를 입력할 필요 없음)
+let adjMin = 30;
+const fmtMin = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ') || '0분';
+function renderAdj() {
+  const t = fmtMin(adjMin).trim();
+  $('#mAdjVal').textContent = t;
+  $('#mAdjAdd').textContent = `＋ ${t} 충전`;
+  $('#mAdjSub').textContent = `－ ${t} 빼기`;
+}
+$$('[data-step]').forEach((b) => (b.onclick = () => { adjMin = Math.min(1440, Math.max(10, adjMin + Number(b.dataset.step))); renderAdj(); }));
+$('#mAdjVal').onclick = () => {
+  const v = parseInt(prompt('몇 분인지 숫자로 입력하세요 (예: 45)', String(adjMin)), 10);
+  if (v > 0) { adjMin = Math.min(1440, v); renderAdj(); }
 };
+$('#mAdjAdd').onclick = () => command(S.openSeat, 'addTime', adjMin);
+$('#mAdjSub').onclick = () => {
+  const s = S.seats.get(S.openSeat);
+  if (confirm(`${s.name}에서 ${fmtMin(adjMin).trim()}을 뺄까요?`)) command(S.openSeat, 'addTime', -adjMin);
+};
+renderAdj();
 $('#mFree').onclick = () => command(S.openSeat, 'setFree');
 $$('[data-cmd]').forEach((b) => (b.onclick = () => {
   const cmd = b.dataset.cmd;

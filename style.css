@@ -125,3 +125,13 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .toasts { position: fixed; top: 70px; right: 16px; left: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 30; pointer-events: none; }
 .toast { pointer-events: auto; background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 12px; font-size: 14px; max-width: 420px; box-shadow: 0 6px 20px rgba(0,0,0,.25); cursor: pointer; }
 .toast.t-order { background: var(--primary); color: #fff; } .toast.t-call, .toast.t-timeout { background: var(--warn); color: #fff; }
+
+.ctl.quick { grid-template-columns: repeat(4, 1fr); }
+.adj { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+.adj .btn { padding: 10px 4px; font-size: 14px; white-space: nowrap; }
+.adj-val { grid-column: 1 / -1; order: -1; padding: 10px; border: 2px solid var(--primary); border-radius: 10px; font-weight: 800; font-size: 22px; color: var(--primary); background: var(--card); }
+.ctl.act { grid-template-columns: 1fr 1fr; }
+.ctl.act .btn { padding: 12px 6px; }
+.ctl .btn { white-space: nowrap; }
+.ctl.ctl4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 640px) { .ctl.ctl4 { grid-template-columns: 1fr 1fr; } }

@@ -28,7 +28,11 @@ jobs:
         env:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEY_PASSWORD" ]; then echo "::error::저장소 Settings > Secrets 에 ANDROID_KEY_PASSWORD 를 넣어 주세요"; exit 1; fi
+          if [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::warning::ANDROID_KEY_PASSWORD 가 없어 서명 없이 컴파일만 확인합니다"
+            gradle --no-daemon assembleDebug
+            echo "::error::저장소 Settings > Secrets 에 ANDROID_KEY_PASSWORD 를 넣어 주세요"; exit 1
+          fi
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in release.keystore.enc -out release.keystore -pass env:ANDROID_KEY_PASSWORD
       - name: Build APK
         working-directory: android

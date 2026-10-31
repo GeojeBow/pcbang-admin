@@ -72,6 +72,8 @@ $('#loginForm').onsubmit = async (e) => {
     const { error } = await sb.auth.signInWithPassword({ email: $('#email').value.trim(), password: $('#password').value });
     if (error) throw new Error(error.message === 'Invalid login credentials' ? '이메일 또는 비밀번호가 틀렸습니다.' : error.message);
     await enter();
+    // 안드로이드 앱이면 앱을 닫아도 알림을 받도록 앱에도 로그인시킨다 (비밀번호는 앱에 저장되지 않음)
+    if (inApp) { window.PCBangApp.login(url, key, $('#email').value.trim(), $('#password').value); setTimeout(updateNotifyBtn, 4000); }
   } catch (err) {
     $('#loginErr').textContent = String(err.message || err);
   } finally { $('#loginBtn').disabled = false; }
@@ -81,6 +83,7 @@ $('#logout').onclick = async () => {
   if (!confirm('로그아웃할까요?')) return;
   await sb.removeAllChannels();
   await sb.auth.signOut();
+  window.PCBangApp?.logout();
   showLogin();
 };
 
@@ -544,12 +547,23 @@ async function alertUser(kind, text, seatId, onClick) {
     } catch {}
   }
 }
+const inApp = !!window.PCBangApp;
 function updateNotifyBtn() {
+  if (inApp) {
+    const on = window.PCBangApp.hasAlerts();
+    $('#notifyBtn').textContent = on ? '🔔' : '🔕';
+    $('#notifyBtn').title = on ? '앱 알림 켜짐 (알림 설정 열기)' : '앱 알림 꺼짐';
+    return;
+  }
   const on = 'Notification' in window && Notification.permission === 'granted';
   $('#notifyBtn').textContent = on ? '🔔' : '🔕';
   $('#notifyBtn').title = on ? '알림 켜짐' : '알림 켜기';
 }
 $('#notifyBtn').onclick = async () => {
+  if (inApp) {
+    if (window.PCBangApp.hasAlerts()) return window.PCBangApp.openNotificationSettings();
+    return toast('앱 알림을 켜려면 로그아웃(⎋) 후 다시 로그인해 주세요.', 'call');
+  }
   if (!('Notification' in window)) return toast('이 브라우저는 알림을 지원하지 않습니다. 핸드폰에서는 홈 화면에 추가한 뒤 사용하세요.');
   const p = await Notification.requestPermission();
   updateNotifyBtn();
@@ -565,5 +579,6 @@ updateNotifyBtn();
   sb = createClient(c.url, c.key);
   const { data } = await sb.auth.getSession();
   if (!data.session) return showLogin();
-  try { await enter(); } catch (e) { showLogin(String(e.message || e)); }
+  try { await enter(); } catch (e) { return showLogin(String(e.message || e)); }
+  if (inApp && !window.PCBangApp.hasAlerts()) toast('앱을 닫아도 알림을 받으려면 로그아웃(⎋) 후 다시 로그인해 주세요.', 'call');
 })();

@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'local.pcbang.admin'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'local.pcbang.admin'
+        minSdk 26
+        targetSdk 35
+        // GitHub Actions 실행 번호가 버전 번호가 된다
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName "1.0.${System.getenv('VERSION_CODE') ?: '1'}"
+        buildConfigField 'String', 'ADMIN_URL', '"https://geojebow.github.io/pcbang-admin/"'
+        buildConfigField 'String', 'RELEASE_API', '"https://api.github.com/repos/GeojeBow/pcbang-admin/releases/latest"'
+    }
+
+    signingConfigs {
+        release {
+            // 서명 키는 암호화되어 저장소에 있고, 비밀번호는 GitHub Secret(ANDROID_KEY_PASSWORD)에만 있다
+            storeFile rootProject.file('release.keystore')
+            storePassword System.getenv('ANDROID_KEY_PASSWORD')
+            keyAlias 'pcbang'
+            keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    buildFeatures { buildConfig true }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -2,6 +2,10 @@
 // Supabase 라이브러리는 vendor/ 폴더에 함께 들어 있다 (index.html에서 먼저 불러옴)
 const { createClient } = window.supabase;
 
+// 화면 버전 (업데이트할 때마다 올린다)
+const APP_VERSION = '1.3.0';
+const APP_UPDATED = '2026-10-31 21:56';
+
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -179,6 +183,13 @@ async function subscribe() {
 
   // 화면 전송 채널 (비공개). 관리자가 접속해 있다는 신호(presence)를 보내야 손님 PC가 화면을 보낸다.
   control = sb.channel('pcbang-control', { config: { private: true, broadcast: { self: false }, presence: { key: 'admin:' + crypto.randomUUID() } } })
+    .on('presence', { event: 'sync' }, () => {
+      S.agentVer = new Map();
+      for (const metas of Object.values(control.presenceState())) {
+        for (const m of metas) if (m.role === 'agent' && m.seatId) S.agentVer.set(m.seatId, m);
+      }
+      renderModal();
+    })
     .on('broadcast', { event: 'thumb' }, ({ payload }) => {
       if (!payload?.seatId) return;
       S.thumbs.set(payload.seatId, payload.img);
@@ -307,6 +318,7 @@ function renderModal() {
   if (!isOnline(s)) { $('#mFrame').removeAttribute('src'); $('#mLiveMsg').textContent = 'PC가 꺼져 있습니다'; }
   const rem = remainingOf(s);
   $('#mRemain').textContent = rem == null ? '자유 이용' : fmtTime(rem);
+  $('#mVer').textContent = guestVerText(id, s);
   const pend = S.pending.get(id) || [];
   $('#mPending').classList.toggle('hidden', !pend.length);
   $('#mPending').textContent = pend.length ? `PC가 켜지면 실행될 명령 ${pend.length}개가 대기 중입니다.` : '';
@@ -314,23 +326,11 @@ function renderModal() {
   renderChatBox($('#mChat'), id);
 }
 
-$$('[data-add]').forEach((b) => (b.onclick = () => command(S.openSeat, 'addTime', b.dataset.add)));
-// 시간 입력: 시간/분 칸에 숫자로 바로 입력 (기본). ±10분/±1시간 버튼은 입력 칸 값을 조금씩 바꾸는 보조.
+// 시간 입력: 분 칸 하나에 숫자로 입력 (예: 90 = 1시간 30분)
 const fmtMin = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ') || '0분';
-function inputMin() {
-  const h = Math.max(0, parseInt($('#mH').value, 10) || 0), m = Math.max(0, parseInt($('#mM').value, 10) || 0);
-  return Math.min(1440, h * 60 + m);
-}
-function setInputMin(total) {
-  total = Math.max(0, Math.min(1440, total));
-  $('#mH').value = Math.floor(total / 60) || '';
-  $('#mM').value = total % 60 || '';
-}
-function clearInput() { $('#mH').value = ''; $('#mM').value = ''; }
-$$('[data-step]').forEach((b) => (b.onclick = () => setInputMin(inputMin() + Number(b.dataset.step))));
-// 분 칸에 60 이상을 넣으면 시간으로 넘긴다 (예: 90분 → 1시간 30분)
-$('#mM').onchange = () => { if ((parseInt($('#mM').value, 10) || 0) >= 60) setInputMin(inputMin()); };
-function needInput() { const n = inputMin(); if (!n) { toast('시간이나 분을 입력하세요.'); $('#mH').focus(); } return n; }
+function inputMin() { return Math.min(1440, Math.max(0, parseInt($('#mM').value, 10) || 0)); }
+function clearInput() { $('#mM').value = ''; }
+function needInput() { const n = inputMin(); if (!n) { toast('분을 입력하세요.'); $('#mM').focus(); } return n; }
 $('#mSet').onclick = () => {
   const n = needInput(); if (!n) return;
   command(S.openSeat, 'setTime', n); toast(`남은 시간을 ${fmtMin(n)}으로 맞췄습니다.`); clearInput();
@@ -613,6 +613,34 @@ async function checkNewVersion() {
 checkNewVersion();
 setInterval(checkNewVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewVersion(); });
+
+// 손님 PC 프로그램 버전 (켜져 있는 PC가 알려 준 값)과 최신 버전 비교
+let latestGuest = null;
+async function loadLatestGuest() {
+  try { latestGuest = await (await fetch('guest-update/version.json', { cache: 'no-store' })).json(); } catch {}
+}
+loadLatestGuest(); setInterval(loadLatestGuest, 10 * 60 * 1000);
+function shortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), p = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function guestVerText(id, s) {
+  if (!isOnline(s)) return '손님 PC 프로그램: PC가 꺼져 있어 확인 불가';
+  const m = S.agentVer?.get(id);
+  if (!m) return '손님 PC 프로그램: v1.2.3 이하 (다음 업데이트 후 표시)';
+  let t = `손님 PC 프로그램 v${m.version}${m.updated ? ' · ' + shortDate(m.updated) + ' 업데이트' : ''}`;
+  if (latestGuest?.version) t += latestGuest.version === m.version ? ' ✅ 최신' : ` ⏳ 최신 v${latestGuest.version} (PC가 잠기면 자동 적용)`;
+  return t;
+}
+
+function showVersion() {
+  const appVer = window.PCBangApp ? ` · 앱 #${window.PCBangApp.version()}` : '';
+  const text = `화면 v${APP_VERSION} · ${APP_UPDATED.slice(5).replace('-', '/')} 업데이트${appVer}`;
+  $('#verLine').textContent = text;
+  $('#verLogin').textContent = text;
+}
+showVersion();
 
 // ---------- 시작 ----------
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

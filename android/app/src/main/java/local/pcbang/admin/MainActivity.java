@@ -76,7 +76,10 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(BuildConfig.ADMIN_URL);
+        else {
+            web.clearCache(true); // 앱을 열 때마다 최신 화면을 받는다
+            web.loadUrl(BuildConfig.ADMIN_URL);
+        }
 
         askNotificationPermission();
         AlertService.startIfReady(this);

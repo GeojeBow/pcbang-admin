@@ -1,5 +1,5 @@
 // 앱 화면 파일만 저장해 두고, 데이터는 항상 실시간으로 받는다
-const CACHE = 'pcbang-admin-v1';
+const CACHE = 'pcbang-admin-v2';
 const SHELL = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'vendor/supabase-2.118.0.js'];
 
 self.addEventListener('install', (e) => {
@@ -12,7 +12,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // 새 버전을 먼저 받고, 안 되면 저장본 사용
-  e.respondWith(fetch(e.request).then((res) => {
+  // 항상 서버에 새 버전이 있는지 확인한다 (브라우저 캐시 때문에 옛 화면이 남지 않게)
+  e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then((res) => {
     const copy = res.clone();
     caches.open(CACHE).then((c) => c.put(e.request, copy));
     return res;

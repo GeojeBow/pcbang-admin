@@ -31,13 +31,14 @@
       <div class="err" id="loginErr"></div>
       <button class="btn primary wide" id="loginBtn">로그인</button>
       <button type="button" class="link" id="editCfg">Supabase 정보 다시 입력</button>
+      <div class="ver" id="verLogin"></div>
     </form>
   </section>
 
   <!-- 본 화면 -->
   <section id="app" class="hidden">
     <header class="top">
-      <div class="brand">🖥️ PC방 관리자</div>
+      <div class="brand">🖥️ PC방 관리자<small id="verLine"></small></div>
       <div class="top-right">
         <span id="conn" class="conn bad">연결 중</span>
         <button class="icon-btn" id="notifyBtn" title="알림 켜기">🔕</button>
@@ -92,29 +93,16 @@
       <div class="sheet-body">
         <div class="live" id="mLive"><img id="mFrame" alt=""><span id="mLiveMsg">화면 불러오는 중…</span></div>
         <div class="remain"><span>남은 시간</span><b id="mRemain">-</b></div>
+        <div class="mver" id="mVer"></div>
         <div class="pending hidden" id="mPending"></div>
-        <div class="ctl-title">시간 충전</div>
-        <div class="ctl quick">
-          <button class="btn" data-add="30">+30분</button>
-          <button class="btn" data-add="60">+1시간</button>
-          <button class="btn" data-add="120">+2시간</button>
-          <button class="btn" data-add="180">+3시간</button>
-        </div>
-        <div class="ctl-title">시간 입력</div>
+        <div class="ctl-title">시간 (분으로 입력)</div>
         <div class="tin">
-          <label><input type="number" id="mH" inputmode="numeric" min="0" max="24" placeholder="0"><span>시간</span></label>
-          <label><input type="number" id="mM" inputmode="numeric" min="0" max="59" placeholder="0"><span>분</span></label>
+          <label><input type="number" id="mM" inputmode="numeric" min="0" max="1440" placeholder="예: 90"><span>분</span></label>
         </div>
         <div class="ctl act3">
-          <button class="btn primary" id="mSet">이 시간으로 맞추기</button>
-          <button class="btn" id="mAdjAdd">＋ 더하기</button>
+          <button class="btn primary" id="mSet">이 시간으로 설정</button>
+          <button class="btn" id="mAdjAdd">＋ 추가</button>
           <button class="btn warn" id="mAdjSub">－ 빼기</button>
-        </div>
-        <div class="adj">
-          <button class="btn" data-step="-60">−1시간</button>
-          <button class="btn" data-step="-10">−10분</button>
-          <button class="btn" data-step="10">+10분</button>
-          <button class="btn" data-step="60">+1시간</button>
         </div>
         <div class="ctl-title">제어</div>
         <div class="ctl ctl4">

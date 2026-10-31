@@ -146,3 +146,15 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 
 .mver { font-size: 12px; color: var(--muted, #94a3b8); margin: 4px 0 8px; }
 .tin input::placeholder { font-weight: 400; font-size: 18px; color: var(--muted); opacity: .6; }
+
+/* 화면 크게 보기 */
+.live { cursor: zoom-in; }
+.live .zoomhint { position: absolute; right: 8px; bottom: 8px; z-index: 2; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 999px; pointer-events: none; }
+.live:has(img:not([src])) .zoomhint { display: none; }
+.zoomview { position: fixed; inset: 0; z-index: 200; background: #000; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.zoomview.hidden { display: none; }
+.zoomview img { width: 100%; height: 100%; object-fit: contain; transform-origin: center center; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.zbar { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 10px 10px; background: linear-gradient(rgba(0,0,0,.7), transparent); color: #fff; }
+.zbar #zName { font-weight: 800; }
+.zbar .zhelp { flex: 1; font-size: 12px; color: #cbd5e1; }
+.zbtn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 20px; font-weight: 700; }

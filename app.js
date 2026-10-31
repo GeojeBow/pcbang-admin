@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.3.0';
-const APP_UPDATED = '2026-10-31 21:56';
+const APP_VERSION = '1.3.1';
+const APP_UPDATED = '2026-10-31 22:21';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -199,6 +199,7 @@ async function subscribe() {
     .on('broadcast', { event: 'frame' }, ({ payload }) => {
       if (payload?.seatId !== S.openSeat) return;
       $('#mFrame').src = payload.img; $('#mLiveMsg').textContent = '';
+      if (zoom.open) $('#zImg').src = payload.img;
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') await control.track({ role: 'admin', at: Date.now() });
@@ -302,6 +303,7 @@ function openSeat(id) {
   ping(); clearInterval(watchTimer); watchTimer = setInterval(ping, 4000);
 }
 function closeSeat() {
+  closeZoom();
   S.openSeat = null; clearInterval(watchTimer);
   $('#seatModal').classList.add('hidden');
 }
@@ -613,6 +615,73 @@ async function checkNewVersion() {
 checkNewVersion();
 setInterval(checkNewVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewVersion(); });
+
+// ---------- 화면 크게 보기 (핀치 줌 / 두 번 탭 / 마우스 휠) ----------
+const zoom = { open: false, s: 1, x: 0, y: 0, pts: new Map(), start: null, lastTap: 0 };
+function applyZoom() {
+  const img = $('#zImg'), box = $('#zoomView');
+  zoom.s = Math.min(6, Math.max(1, zoom.s));
+  // 이미지가 화면 밖으로 너무 나가지 않게
+  const mx = (box.clientWidth * (zoom.s - 1)) / 2, my = (box.clientHeight * (zoom.s - 1)) / 2;
+  zoom.x = Math.min(mx, Math.max(-mx, zoom.x)); zoom.y = Math.min(my, Math.max(-my, zoom.y));
+  img.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
+}
+// (cx, cy) 지점을 기준으로 확대 배율을 바꾼다
+function zoomAt(ns, cx, cy) {
+  const box = $('#zoomView').getBoundingClientRect();
+  const px = cx - box.left - box.width / 2, py = cy - box.top - box.height / 2;
+  ns = Math.min(6, Math.max(1, ns));
+  zoom.x = px - ((px - zoom.x) * ns) / zoom.s; zoom.y = py - ((py - zoom.y) * ns) / zoom.s; zoom.s = ns;
+  applyZoom();
+}
+function openZoom() {
+  if (!$('#mFrame').getAttribute('src')) return;
+  zoom.open = true; zoom.s = 1; zoom.x = 0; zoom.y = 0;
+  $('#zImg').src = $('#mFrame').src;
+  $('#zName').textContent = $('#mName').textContent;
+  $('#zoomView').classList.remove('hidden'); applyZoom();
+}
+function closeZoom() { zoom.open = false; zoom.pts.clear(); $('#zoomView').classList.add('hidden'); }
+$('#mLive').onclick = openZoom;
+$('#zClose').onclick = closeZoom;
+const zCenter = () => { const r = $('#zoomView').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+$('#zIn').onclick = () => zoomAt(zoom.s * 1.5, ...zCenter());
+$('#zOut').onclick = () => zoomAt(zoom.s / 1.5, ...zCenter());
+{
+  const v = $('#zoomView');
+  v.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.zbar')) return;
+    v.setPointerCapture(e.pointerId);
+    zoom.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    zoom.start = null;
+    if (zoom.pts.size === 1) {
+      const now = Date.now();
+      if (now - zoom.lastTap < 300) { zoomAt(zoom.s > 1.2 ? 1 : 2.5, e.clientX, e.clientY); zoom.lastTap = 0; }
+      else zoom.lastTap = now;
+    }
+  });
+  v.addEventListener('pointermove', (e) => {
+    const p = zoom.pts.get(e.pointerId); if (!p) return;
+    const pts = [...zoom.pts.values()];
+    if (zoom.pts.size === 1) {
+      zoom.x += e.clientX - p.x; zoom.y += e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY; applyZoom();
+    } else if (zoom.pts.size === 2) {
+      p.x = e.clientX; p.y = e.clientY;
+      const [a, b] = pts, dist = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      if (!zoom.start) zoom.start = { dist, s: zoom.s, cx, cy };
+      else {
+        zoom.x += cx - zoom.start.cx; zoom.y += cy - zoom.start.cy; zoom.start.cx = cx; zoom.start.cy = cy;
+        zoomAt((zoom.start.s * dist) / zoom.start.dist, cx, cy);
+      }
+    }
+  });
+  const up = (e) => { zoom.pts.delete(e.pointerId); zoom.start = null; };
+  v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
+  v.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(zoom.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY); }, { passive: false });
+  window.addEventListener('resize', () => { if (zoom.open) applyZoom(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && zoom.open) closeZoom(); });
+}
 
 // 손님 PC 프로그램 버전 (켜져 있는 PC가 알려 준 값)과 최신 버전 비교
 let latestGuest = null;

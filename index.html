@@ -91,7 +91,7 @@
         <button class="icon-btn" id="mClose">✕</button>
       </div>
       <div class="sheet-body">
-        <div class="live" id="mLive"><img id="mFrame" alt=""><span id="mLiveMsg">화면 불러오는 중…</span></div>
+        <div class="live" id="mLive"><img id="mFrame" alt=""><span id="mLiveMsg">화면 불러오는 중…</span><span class="zoomhint">🔍 눌러서 크게 보기</span></div>
         <div class="remain"><span>남은 시간</span><b id="mRemain">-</b></div>
         <div class="mver" id="mVer"></div>
         <div class="pending hidden" id="mPending"></div>
@@ -146,5 +146,10 @@
   <div id="toasts" class="toasts"></div>
   <script src="vendor/supabase-2.118.0.js" defer></script>
   <script src="app.js" defer></script>
+<div id="zoomView" class="zoomview hidden">
+  <img id="zImg" alt="">
+  <div class="zbar"><span id="zName"></span><span class="zhelp">두 손가락으로 확대 · 두 번 탭</span>
+    <button class="zbtn" id="zOut">－</button><button class="zbtn" id="zIn">＋</button><button class="zbtn" id="zClose">✕</button></div>
+</div>
 </body>
 </html>

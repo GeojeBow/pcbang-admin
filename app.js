@@ -315,26 +315,35 @@ function renderModal() {
 }
 
 $$('[data-add]').forEach((b) => (b.onclick = () => command(S.openSeat, 'addTime', b.dataset.add)));
-// 시간 조정: 버튼으로 양을 맞추고 충전/빼기 (핸드폰에서 마이너스를 입력할 필요 없음)
-let adjMin = 30;
+// 시간 입력: 시간/분 칸에 숫자로 바로 입력 (기본). ±10분/±1시간 버튼은 입력 칸 값을 조금씩 바꾸는 보조.
 const fmtMin = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ') || '0분';
-function renderAdj() {
-  const t = fmtMin(adjMin).trim();
-  $('#mAdjVal').textContent = t;
-  $('#mAdjAdd').textContent = `＋ ${t} 충전`;
-  $('#mAdjSub').textContent = `－ ${t} 빼기`;
+function inputMin() {
+  const h = Math.max(0, parseInt($('#mH').value, 10) || 0), m = Math.max(0, parseInt($('#mM').value, 10) || 0);
+  return Math.min(1440, h * 60 + m);
 }
-$$('[data-step]').forEach((b) => (b.onclick = () => { adjMin = Math.min(1440, Math.max(10, adjMin + Number(b.dataset.step))); renderAdj(); }));
-$('#mAdjVal').onclick = () => {
-  const v = parseInt(prompt('몇 분인지 숫자로 입력하세요 (예: 45)', String(adjMin)), 10);
-  if (v > 0) { adjMin = Math.min(1440, v); renderAdj(); }
+function setInputMin(total) {
+  total = Math.max(0, Math.min(1440, total));
+  $('#mH').value = Math.floor(total / 60) || '';
+  $('#mM').value = total % 60 || '';
+}
+function clearInput() { $('#mH').value = ''; $('#mM').value = ''; }
+$$('[data-step]').forEach((b) => (b.onclick = () => setInputMin(inputMin() + Number(b.dataset.step))));
+// 분 칸에 60 이상을 넣으면 시간으로 넘긴다 (예: 90분 → 1시간 30분)
+$('#mM').onchange = () => { if ((parseInt($('#mM').value, 10) || 0) >= 60) setInputMin(inputMin()); };
+function needInput() { const n = inputMin(); if (!n) { toast('시간이나 분을 입력하세요.'); $('#mH').focus(); } return n; }
+$('#mSet').onclick = () => {
+  const n = needInput(); if (!n) return;
+  command(S.openSeat, 'setTime', n); toast(`남은 시간을 ${fmtMin(n)}으로 맞췄습니다.`); clearInput();
 };
-$('#mAdjAdd').onclick = () => command(S.openSeat, 'addTime', adjMin);
+$('#mAdjAdd').onclick = () => {
+  const n = needInput(); if (!n) return;
+  command(S.openSeat, 'addTime', n); toast(`${fmtMin(n)} 충전했습니다.`); clearInput();
+};
 $('#mAdjSub').onclick = () => {
+  const n = needInput(); if (!n) return;
   const s = S.seats.get(S.openSeat);
-  if (confirm(`${s.name}에서 ${fmtMin(adjMin).trim()}을 뺄까요?`)) command(S.openSeat, 'addTime', -adjMin);
+  if (confirm(`${s.name}에서 ${fmtMin(n)}을 뺄까요?`)) { command(S.openSeat, 'addTime', -n); clearInput(); }
 };
-renderAdj();
 $('#mFree').onclick = () => command(S.openSeat, 'setFree');
 $$('[data-cmd]').forEach((b) => (b.onclick = () => {
   const cmd = b.dataset.cmd;

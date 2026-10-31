@@ -100,17 +100,21 @@
           <button class="btn" data-add="120">+2시간</button>
           <button class="btn" data-add="180">+3시간</button>
         </div>
-        <div class="ctl-title">시간 조정 (원하는 만큼 맞춘 뒤 충전 또는 빼기)</div>
+        <div class="ctl-title">시간 입력</div>
+        <div class="tin">
+          <label><input type="number" id="mH" inputmode="numeric" min="0" max="24" placeholder="0"><span>시간</span></label>
+          <label><input type="number" id="mM" inputmode="numeric" min="0" max="59" placeholder="0"><span>분</span></label>
+        </div>
+        <div class="ctl act3">
+          <button class="btn primary" id="mSet">이 시간으로 맞추기</button>
+          <button class="btn" id="mAdjAdd">＋ 더하기</button>
+          <button class="btn warn" id="mAdjSub">－ 빼기</button>
+        </div>
         <div class="adj">
           <button class="btn" data-step="-60">−1시간</button>
           <button class="btn" data-step="-10">−10분</button>
-          <button class="adj-val" id="mAdjVal" title="눌러서 직접 입력">30분</button>
           <button class="btn" data-step="10">+10분</button>
           <button class="btn" data-step="60">+1시간</button>
-        </div>
-        <div class="ctl act">
-          <button class="btn primary" id="mAdjAdd">＋ 30분 충전</button>
-          <button class="btn warn" id="mAdjSub">－ 30분 빼기</button>
         </div>
         <div class="ctl-title">제어</div>
         <div class="ctl ctl4">

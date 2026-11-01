@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.3.1';
-const APP_UPDATED = '2026-10-31 22:21';
+const APP_VERSION = '1.3.2';
+const APP_UPDATED = '2026-11-01 09:49';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -335,7 +335,15 @@ function clearInput() { $('#mM').value = ''; }
 function needInput() { const n = inputMin(); if (!n) { toast('분을 입력하세요.'); $('#mM').focus(); } return n; }
 $('#mSet').onclick = () => {
   const n = needInput(); if (!n) return;
-  command(S.openSeat, 'setTime', n); toast(`남은 시간을 ${fmtMin(n)}으로 맞췄습니다.`); clearInput();
+  const s = S.seats.get(S.openSeat), m = S.agentVer?.get(S.openSeat);
+  // 손님 PC 프로그램이 1.2.4보다 예전이면 '설정' 명령을 몰라서, 지금 남은 시간과의 차이만큼 더하기/빼기로 보낸다
+  const oldGuest = !m || !m.version || m.version.localeCompare('1.2.4', undefined, { numeric: true }) < 0;
+  if (oldGuest && s && isOnline(s)) {
+    const cur = s.mode === 'timed' ? Math.round((remainingOf(s) || 0) / 60) : 0;
+    if (s.mode !== 'timed') command(S.openSeat, 'addTime', n);
+    else if (n !== cur) command(S.openSeat, 'addTime', n - cur);
+  } else command(S.openSeat, 'setTime', n);
+  toast(`남은 시간을 ${fmtMin(n)}으로 맞췄습니다.`); clearInput();
 };
 $('#mAdjAdd').onclick = () => {
   const n = needInput(); if (!n) return;

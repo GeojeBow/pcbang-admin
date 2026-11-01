@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.3.3';
-const APP_UPDATED = '2026-11-01 09:53';
+const APP_VERSION = '1.4.0';
+const APP_UPDATED = '2026-11-01 10:48';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -130,6 +130,26 @@ function pushMsg(m) {
   return true;
 }
 function addPending(c) { const l = S.pending.get(c.seat_id) || []; if (!l.some((x) => x.id === c.id)) l.push(c); S.pending.set(c.seat_id, l); }
+// 대기 중인 명령 이름
+function cmdLabel(c) {
+  const n = Number(c.arg) || 0, t = new Date(c.created_at || Date.now());
+  const when = `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  const m = (x) => fmtMin(Math.abs(x));
+  const label = {
+    addTime: n >= 0 ? `＋ ${m(n)} 추가` : `－ ${m(n)} 빼기`, setTime: `남은 시간 ${m(n)}으로 설정`, setFree: '자유 이용',
+    lock: '잠금', unlock: '잠금 해제', endSession: '사용 종료', shutdown: 'PC 끄기', restart: '재시작',
+    notice: `공지: ${String(c.arg || '').slice(0, 30)}`,
+  }[c.cmd] || c.cmd;
+  return `${label} (${when})`;
+}
+// 아직 실행되지 않은 명령 취소 (PC가 켜지기 전에만 의미 있음)
+async function cancelCommands(seatId, ids) {
+  if (!ids.length) return;
+  const { error } = await sb.from('commands').delete().in('id', ids).eq('done', false);
+  if (error) { toast('취소 실패: ' + error.message, 'timeout'); return; }
+  S.pending.set(seatId, (S.pending.get(seatId) || []).filter((c) => !ids.includes(c.id)));
+  toast(`명령 ${ids.length}개를 취소했습니다.`); renderModal();
+}
 function removePending(c) { const l = (S.pending.get(c.seat_id) || []).filter((x) => x.id !== c.id); S.pending.set(c.seat_id, l); }
 
 async function subscribe() {
@@ -177,7 +197,10 @@ async function subscribe() {
       S.menu = data || []; renderMenu();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'commands' }, (p) => {
-      if (p.eventType === 'DELETE') return;
+      if (p.eventType === 'DELETE') {
+        for (const [k, l] of S.pending) S.pending.set(k, l.filter((x) => x.id !== p.old.id));
+        renderModal(); return;
+      }
       if (p.new.done) removePending(p.new); else addPending(p.new);
       renderModal();
     })
@@ -208,7 +231,10 @@ async function subscribe() {
     });
 }
 
+let connOk = false, connSince = 0;
 function setConn(ok) {
+  if (ok && !connOk) connSince = Date.now();
+  connOk = ok;
   $('#conn').className = 'conn ' + (ok ? 'ok' : 'bad');
   $('#conn').textContent = ok ? '실시간' : '연결 중';
 }
@@ -282,8 +308,20 @@ setInterval(() => {
     if (s) { const rem = remainingOf(s); $('#mRemain').textContent = rem == null ? '자유 이용' : fmtTime(rem); }
   }
 }, 1000);
-// 켜짐/꺼짐 판정 갱신
-setInterval(() => { if (!$('#app').classList.contains('hidden')) renderSeats(); }, 15000);
+// 켜짐/꺼짐 판정 갱신 + 사용 중이던 PC가 갑자기 끊기면 알림 (정상 종료는 PC가 '꺼짐'을 먼저 기록한다)
+const wasInUse = new Map();
+function checkDrops() {
+  // 관리자 쪽 연결이 막 살아났거나 끊긴 상태면 판단하지 않는다 (가짜 알림 방지)
+  if (!connOk || document.hidden || Date.now() - connSince < 60_000) { wasInUse.clear(); return; }
+  for (const s of S.seats.values()) {
+    const on = isOnline(s), inUse = on && !s.locked;
+    if (wasInUse.get(s.id) && !on && s.online) {
+      alertUser('call', `⚠️ ${s.name} 연결이 갑자기 끊겼어요. 프로그램 강제 종료, 전원 또는 인터넷 문제일 수 있어요.`, s.id);
+    }
+    wasInUse.set(s.id, inUse);
+  }
+}
+setInterval(() => { if (!$('#app').classList.contains('hidden')) { checkDrops(); renderSeats(); } }, 15000);
 
 $('#lockAll').onclick = async () => {
   const targets = sortedSeats().filter((s) => isOnline(s) && !s.locked);
@@ -325,7 +363,11 @@ function renderModal() {
   $('#mVer').textContent = guestVerText(id, s);
   const pend = S.pending.get(id) || [];
   $('#mPending').classList.toggle('hidden', !pend.length);
-  $('#mPending').textContent = pend.length ? `PC가 켜지면 실행될 명령 ${pend.length}개가 대기 중입니다.` : '';
+  $('#mPending').innerHTML = pend.length ? `<div class="ph"><b>PC가 켜지면 실행될 명령 ${pend.length}개</b>
+      <button class="btn small" data-cancel-all>모두 취소</button></div>
+    ${pend.map((c) => `<div class="pr"><span>${esc(cmdLabel(c))}</span><button class="btn small" data-cancel="${c.id}">취소</button></div>`).join('')}` : '';
+  $$('[data-cancel]').forEach((b) => (b.onclick = () => cancelCommands(id, [Number(b.dataset.cancel)])));
+  const all = $('[data-cancel-all]'); if (all) all.onclick = () => { if (confirm('대기 중인 명령을 모두 취소할까요?')) cancelCommands(id, pend.map((c) => c.id)); };
   $('#mDelete').disabled = isOnline(s);
   renderChatBox($('#mChat'), id);
 }

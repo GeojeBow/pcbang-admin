@@ -35,6 +35,10 @@ public class AlertService extends Service {
     private long lastOrder = -1, lastMsg = -1;
     private final Map<String, String> seatNames = new HashMap<>();
     private final Map<String, Boolean> seatTimedOut = new HashMap<>();
+    // 비정상 종료 감지: last_seen 값이 바뀐 마지막 시각(핸드폰 시계 기준, PC 시계가 틀려도 됨)
+    private final Map<String, String> seatLastSeen = new HashMap<>();
+    private final Map<String, Long> seatSeenChangedAt = new HashMap<>();
+    private final Map<String, Boolean> seatInUse = new HashMap<>();
     private boolean seatsLoaded = false;
 
     // ---------- 세션 저장 ----------
@@ -178,7 +182,7 @@ public class AlertService extends Service {
         String tok = token();
 
         // 좌석 이름과 시간 종료
-        JSONArray seats = Api.getArray(base + "seats?select=id,name,locked,mode,remaining_sec", key, tok);
+        JSONArray seats = Api.getArray(base + "seats?select=id,name,locked,mode,remaining_sec,online,last_seen", key, tok);
         for (int i = 0; i < seats.length(); i++) {
             JSONObject s = seats.getJSONObject(i);
             String id = s.getString("id");
@@ -186,6 +190,19 @@ public class AlertService extends Service {
             boolean out = s.optBoolean("locked") && "timed".equals(s.optString("mode")) && s.optInt("remaining_sec") == 0;
             Boolean before = seatTimedOut.put(id, out);
             if (seatsLoaded && out && Boolean.FALSE.equals(before)) alert("⏰ 시간 종료", s.optString("name") + " 사용 시간이 끝나 잠겼어요.");
+
+            // 사용 중이던 PC가 정상 종료 기록 없이 1분 넘게 소식이 없으면 알림
+            long now = System.currentTimeMillis();
+            String seen = s.optString("last_seen", "");
+            if (!seatLastSeen.containsKey(id)) { seatLastSeen.put(id, seen); seatSeenChangedAt.put(id, 0L); } // 처음 본 값은 살아 있다는 증거가 아님
+            else if (!seen.equals(seatLastSeen.get(id))) { seatLastSeen.put(id, seen); seatSeenChangedAt.put(id, now); }
+            Long changed = seatSeenChangedAt.get(id);
+            boolean alive = s.optBoolean("online") && changed != null && now - changed < 60_000;
+            boolean inUse = alive && !s.optBoolean("locked");
+            if (seatsLoaded && Boolean.TRUE.equals(seatInUse.get(id)) && !alive && s.optBoolean("online")) {
+                alert("⚠️ " + s.optString("name") + " 연결 끊김", "사용 중이던 PC의 연결이 갑자기 끊겼어요. 프로그램 강제 종료, 전원 또는 인터넷 문제일 수 있어요.");
+            }
+            seatInUse.put(id, inUse);
         }
         seatsLoaded = true;
 

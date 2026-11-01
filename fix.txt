@@ -1,0 +1,45 @@
+# PCbang guest manual update (run with: Win+R -> powershell -ep bypass -c "irm https://geojebow.github.io/pcbang-admin/fix.txt | iex")
+$ErrorActionPreference = 'Stop'
+$base = 'https://geojebow.github.io/pcbang-admin/guest-update'
+try {
+  $dirs = Get-ChildItem $env:APPDATA -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'config.json') } | Where-Object { Test-Path (Join-Path $_.FullName 'state.json') }
+  $data = ($dirs | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+  if (-not $data) { throw 'PCbang data folder not found' }
+  Write-Host "data: $data"
+
+  $t = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
+  $info = Invoke-RestMethod "$base/version.json?t=$t"
+  $wc = New-Object Net.WebClient
+  $wc.Encoding = [Text.Encoding]::UTF8
+  $text = $wc.DownloadString("$base/$($info.bundle)?t=$t")
+  $sha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-', '').ToLower()
+  if ($sha -ne $info.sha256) { throw 'download check failed, try again' }
+  $bundle = $text | ConvertFrom-Json
+
+  $upd = Join-Path $data 'update'
+  $stage = Join-Path $upd 'staging'
+  $cur = Join-Path $upd 'current'
+  if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+  New-Item -ItemType Directory -Force $stage | Out-Null
+  $utf8 = New-Object Text.UTF8Encoding $false
+  foreach ($p in $bundle.files.PSObject.Properties) {
+    [IO.File]::WriteAllText((Join-Path $stage $p.Name), [string]$p.Value, $utf8)
+  }
+  [IO.File]::WriteAllText((Join-Path $stage 'version.json'), (@{ version = $info.version; date = $info.date } | ConvertTo-Json -Compress), $utf8)
+  if (Test-Path $cur) { Remove-Item $cur -Recurse -Force }
+  Rename-Item $stage 'current'
+  foreach ($f in 'boot.json', 'bad-version') { $x = Join-Path $upd $f; if (Test-Path $x) { Remove-Item $x -Force } }
+
+  # restart the program (remove 'running' first so the force-close guard does not shut the PC down)
+  $exe = (Get-Process PCbangGuest -ErrorAction SilentlyContinue | Where-Object { $_.Path } | Select-Object -First 1).Path
+  $run = Join-Path $data 'running'
+  if (Test-Path $run) { Remove-Item $run -Force }
+  Get-Process PCbangGuest -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 4
+  if ($exe -and -not (Get-Process PCbangGuest -ErrorAction SilentlyContinue)) { Start-Process $exe }
+  Write-Host ''
+  Write-Host "OK - updated to v$($info.version)" -ForegroundColor Green
+} catch {
+  Write-Host "FAILED: $($_.Exception.Message)" -ForegroundColor Red
+}
+Start-Sleep 5

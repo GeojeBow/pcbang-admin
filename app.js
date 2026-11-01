@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.3.2';
-const APP_UPDATED = '2026-11-01 09:49';
+const APP_VERSION = '1.3.3';
+const APP_UPDATED = '2026-11-01 09:53';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -36,7 +36,9 @@ const S = {
 let sb = null;
 let control = null;
 
-const isOnline = (s) => s.online && Date.now() - new Date(s.last_seen).getTime() < 45_000;
+// 켜짐 판정: 실시간 연결(presence)에 들어와 있으면 켜짐. 시계가 틀린 PC도 정확히 잡힌다.
+// 실시간 연결 정보가 아직 없으면 마지막 기록 시각으로 판단 (손님 PC 시계가 늦으면 꺼짐으로 보일 수 있음)
+const isOnline = (s) => !!S.agentVer?.has(s.id) || (s.online && Date.now() - new Date(s.last_seen).getTime() < 45_000);
 function remainingOf(s) {
   if (s.mode !== 'timed') return null;
   const elapsed = isOnline(s) && !s.locked ? Math.floor((Date.now() - s._at) / 1000) : 0;
@@ -188,7 +190,7 @@ async function subscribe() {
       for (const metas of Object.values(control.presenceState())) {
         for (const m of metas) if (m.role === 'agent' && m.seatId) S.agentVer.set(m.seatId, m);
       }
-      renderModal();
+      renderSeats(); renderModal();
     })
     .on('broadcast', { event: 'thumb' }, ({ payload }) => {
       if (!payload?.seatId) return;

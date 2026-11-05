@@ -4,7 +4,7 @@ const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
 const APP_VERSION = '1.5.0';
-const APP_UPDATED = '2026-11-05 11:40';
+const APP_UPDATED = '2026-11-05 11:50';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -29,7 +29,7 @@ const S = {
   orders: [],
   messages: new Map(),  // seatId -> [rows]
   menu: [],
-  coupons: [],          // 추가이용쿠폰 (null = 아직 SQL 설정 안 됨)
+  passes: [],           // 추가 이용권 (null = 아직 SQL 설정 안 됨)
   pending: new Map(),   // seatId -> [commands 미실행]
   openSeat: null,
   openChat: null,
@@ -123,11 +123,8 @@ async function loadAll() {
   S.menu = menu.data || [];
   S.pending = new Map();
   for (const c of cmds.data || []) addPending(c);
-  await loadCoupons();
-}
-async function loadCoupons() {
-  const { data, error } = await sb.from('coupons').select('*').order('created_at', { ascending: false }).limit(500);
-  S.coupons = error ? null : data || [];
+  const ps = await sb.from('passes').select('*').order('created_at', { ascending: false }).limit(500);
+  S.passes = ps.error ? null : ps.data || [];
 }
 function pushMsg(m) {
   const list = S.messages.get(m.seat_id) || [];
@@ -202,18 +199,18 @@ async function subscribe() {
       const { data } = await sb.from('menu').select('*').order('sort').order('id');
       S.menu = data || []; renderMenu();
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, (p) => {
-      if (!S.coupons) return;
-      if (p.eventType === 'DELETE') S.coupons = S.coupons.filter((c) => c.id !== p.old.id);
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'passes' }, (p) => {
+      if (!S.passes) return;
+      if (p.eventType === 'DELETE') S.passes = S.passes.filter((x) => x.id !== p.old.id);
       else {
-        const i = S.coupons.findIndex((c) => c.id === p.new.id);
-        const before = i >= 0 ? S.coupons[i] : null;
-        if (i >= 0) S.coupons[i] = p.new; else S.coupons.unshift(p.new);
+        const i = S.passes.findIndex((x) => x.id === p.new.id);
+        const before = i >= 0 ? S.passes[i] : null;
+        if (i >= 0) S.passes[i] = p.new; else S.passes.unshift(p.new);
         if (before && before.status !== 'used' && p.new.status === 'used') {
-          alertUser('order', `🎟 ${p.new.used_seat_name || 'PC'}에서 쿠폰 ${fmtCode(p.new.code)} (${fmtMin(p.new.minutes)}${p.new.holder ? ' · ' + p.new.holder : ''})을 사용했습니다.`, null, () => showTab('coupons'));
+          alertUser('order', `🎟 ${p.new.used_seat_name || 'PC'}에서 이용권 ${fmtMin(p.new.minutes)}${p.new.holder ? ` (${p.new.holder})` : ''}을 사용했습니다.`, p.new.seat_id);
         }
       }
-      renderCoupons();
+      renderPasses(); renderModal();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'commands' }, (p) => {
       if (p.eventType === 'DELETE') {
@@ -293,7 +290,7 @@ function sortedSeats() {
   return [...S.seats.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
 }
 
-function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderCoupons(); }
+function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); }
 
 function renderSeats() {
   const seats = sortedSeats();
@@ -388,6 +385,8 @@ function renderModal() {
   $$('[data-cancel]').forEach((b) => (b.onclick = () => cancelCommands(id, [Number(b.dataset.cancel)])));
   const all = $('[data-cancel-all]'); if (all) all.onclick = () => { if (confirm('대기 중인 명령을 모두 취소할까요?')) cancelCommands(id, pend.map((c) => c.id)); };
   $('#mDelete').disabled = isOnline(s);
+  const mine = activePassesOf(id);
+  $('#mPasses').textContent = S.passes == null ? '이용권: SQL 설정 필요' : mine.length ? `🎟 이용권 ${mine.length}장 보유 (${fmtMin(mine.reduce((a, p) => a + p.minutes, 0))})` : '이용권 없음';
   renderChatBox($('#mChat'), id);
 }
 
@@ -608,127 +607,93 @@ $('#addMenu').onclick = async () => {
   if (error) toast(error.message);
 };
 
-// ---------- 추가이용쿠폰 ----------
-// 번호: 헷갈리는 글자(0/O, 1/I/L)를 뺀 8자리. 화면에는 ABCD-EFGH 로 보여 준다.
-const CP_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const fmtCode = (c) => String(c || '').slice(0, 4) + '-' + String(c || '').slice(4);
-function newCode() {
-  const r = crypto.getRandomValues(new Uint32Array(8));
-  return [...r].map((x) => CP_CHARS[x % CP_CHARS.length]).join('');
-}
+// ---------- 추가 이용권 ----------
 const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`; };
-const isExpired = (c) => c.status === 'active' && c.expires_at && new Date(c.expires_at) < new Date();
-function couponState(c) {
-  if (isExpired(c)) return ['expired', '기한 지남'];
-  return { active: ['active', '사용 가능'], used: ['used', '사용됨'], canceled: ['canceled', '취소됨'] }[c.status] || ['', c.status];
+const isExpired = (p) => p.status === 'active' && p.expires_at && new Date(p.expires_at) < new Date();
+const activePassesOf = (seatId) => (S.passes || []).filter((p) => p.seat_id === seatId && p.status === 'active' && !isExpired(p));
+const seatName = (id) => S.seats.get(id)?.name || '(삭제된 PC)';
+function passState(p) {
+  if (isExpired(p)) return ['expired', '기한 지남'];
+  return { active: ['active', '사용 전'], used: ['used', '사용됨'], canceled: ['canceled', '취소됨'] }[p.status] || ['', p.status];
 }
-function couponText(c) {
-  return `🎟 추가이용쿠폰 (${fmtMin(c.minutes)})\n쿠폰 번호: ${fmtCode(c.code)}\n${c.expires_at ? `사용 기한: ${ymd(c.expires_at)}까지\n` : ''}원할 때 PC 화면의 [🎟 쿠폰] 버튼을 눌러 번호를 입력하면 ${fmtMin(c.minutes)}이 추가됩니다. (1회용)`;
+function seatOptions(selected) {
+  return sortedSeats().map((s) => `<option value="${s.id}" ${s.id === selected ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
 }
-async function copyText(t) {
-  try { await navigator.clipboard.writeText(t); toast('복사했습니다.'); }
-  catch { prompt('아래 내용을 복사하세요.', t); }
-}
-async function shareCoupon(c) {
-  const text = couponText(c);
-  if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
-  copyText(text);
-}
-$$('[data-cpmin]').forEach((b) => (b.onclick = () => { $('#cpMin').value = b.dataset.cpmin; }));
-$('#cpFilter').onchange = renderCoupons;
-let lastIssued = [];
-$('#cpIssue').onclick = async () => {
-  if (!S.coupons) return toast('쿠폰 기능을 쓰려면 Supabase에서 쿠폰 SQL을 먼저 실행해야 합니다. (설치 안내 참고)', 'call');
-  const minutes = Math.min(1440, Math.max(0, parseInt($('#cpMin').value, 10) || 0));
-  if (!minutes) { toast('쿠폰 시간을 분으로 입력하세요.'); $('#cpMin').focus(); return; }
-  const count = Math.min(20, Math.max(1, parseInt($('#cpCount').value, 10) || 1));
-  const days = Number($('#cpExp').value) || 0;
-  const holder = $('#cpHolder').value.trim() || null, note = $('#cpNote').value.trim() || null;
-  if (!confirm(`${fmtMin(minutes)} 쿠폰 ${count}장을 발행할까요?${holder ? `\n받는 손님: ${holder}` : ''}`)) return;
-  const expires_at = days ? new Date(Date.now() + days * 86400_000).toISOString() : null;
-  $('#cpIssue').disabled = true;
-  try {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const rows = Array.from({ length: count }, () => ({ code: newCode(), minutes, holder, note, expires_at }));
-      const { data, error } = await sb.from('coupons').insert(rows).select();
-      if (!error) {
-        lastIssued = data;
-        for (const c of data) if (!S.coupons.some((x) => x.id === c.id)) S.coupons.unshift(c);
-        $('#cpMin').value = ''; $('#cpHolder').value = ''; $('#cpNote').value = ''; $('#cpCount').value = 1;
-        $('#cpFilter').value = 'active';
-        renderCoupons(); toast(`쿠폰 ${data.length}장을 발행했습니다.`);
-        return;
-      }
-      if (!/duplicate|unique/i.test(error.message)) { toast('발행 실패: ' + error.message, 'timeout'); return; }
-    }
-    toast('발행 실패: 다시 시도해 주세요.', 'timeout');
-  } finally { $('#cpIssue').disabled = false; }
+$$('[data-psmin]').forEach((b) => (b.onclick = () => { $('#psMin').value = b.dataset.psmin; }));
+$('#psFilter').onchange = renderPasses;
+$('#mGivePass').onclick = () => {
+  const id = S.openSeat; closeSeat(); showTab('passes');
+  renderPasses(); $('#psSeat').value = id; $('#psMin').focus();
 };
-function renderCoupons() {
-  const box = $('#couponList');
-  if (!S.coupons) {
-    $('#cpSummary').textContent = '';
-    box.innerHTML = '<p class="empty">쿠폰 기능을 쓰려면 Supabase <b>SQL Editor</b>에서 <b>쿠폰 SQL</b>을 한 번 실행해야 합니다.<br>(설치 안내 참고)</p>';
+$('#psGive').onclick = async () => {
+  if (!S.passes) return toast('이용권 기능을 쓰려면 Supabase에서 이용권 SQL을 먼저 실행해야 합니다.', 'call');
+  const seat_id = $('#psSeat').value;
+  if (!seat_id) return toast('이용권을 줄 PC를 고르세요.');
+  const minutes = Math.min(1440, Math.max(0, parseInt($('#psMin').value, 10) || 0));
+  if (!minutes) { toast('이용권 시간을 분으로 입력하세요.'); $('#psMin').focus(); return; }
+  const count = Math.min(20, Math.max(1, parseInt($('#psCount').value, 10) || 1));
+  const days = Number($('#psExp').value) || 0;
+  const holder = $('#psHolder').value.trim() || null, note = $('#psNote').value.trim() || null;
+  if (!confirm(`${seatName(seat_id)}에 ${fmtMin(minutes)} 이용권 ${count}장을 줄까요?${holder ? `\n받는 손님: ${holder}` : ''}`)) return;
+  const expires_at = days ? new Date(Date.now() + days * 86400_000).toISOString() : null;
+  $('#psGive').disabled = true;
+  const rows = Array.from({ length: count }, () => ({ seat_id, minutes, holder, note, expires_at }));
+  const { data, error } = await sb.from('passes').insert(rows).select();
+  $('#psGive').disabled = false;
+  if (error) return toast('실패: ' + error.message, 'timeout');
+  for (const p of data) if (!S.passes.some((x) => x.id === p.id)) S.passes.unshift(p);
+  $('#psMin').value = ''; $('#psHolder').value = ''; $('#psNote').value = ''; $('#psCount').value = 1; $('#psFilter').value = 'active';
+  renderPasses(); toast(`${seatName(seat_id)}에 이용권 ${data.length}장을 넣었습니다.`);
+};
+function renderPasses() {
+  const keep = $('#psSeat').value;
+  $('#psSeat').innerHTML = '<option value="">받을 손님 PC 선택</option>' + seatOptions(keep);
+  const box = $('#passList');
+  if (!S.passes) {
+    $('#psSummary').textContent = '';
+    box.innerHTML = '<p class="empty">이용권 기능을 쓰려면 Supabase <b>SQL Editor</b>에서 <b>이용권 SQL</b>을 한 번 실행해야 합니다.</p>';
     return;
   }
-  const f = $('#cpFilter').value;
-  const active = S.coupons.filter((c) => c.status === 'active' && !isExpired(c));
-  const usedToday = S.coupons.filter((c) => c.status === 'used' && new Date(c.used_at).toDateString() === new Date().toDateString());
-  $('#cpSummary').textContent = `사용 가능 ${active.length}장 (${fmtMin(active.reduce((a, c) => a + c.minutes, 0))}) · 오늘 사용 ${usedToday.length}장`;
-  const list = S.coupons.filter((c) => f === 'all' || (f === 'active' ? c.status === 'active' && !isExpired(c) : c.status === 'used'));
-  const fresh = lastIssued.filter((c) => S.coupons.find((x) => x.id === c.id)?.status === 'active');
-  const freshHtml = fresh.length ? `<div class="cp-new"><b>방금 발행한 쿠폰</b> · 손님에게 번호를 알려 주세요
-      ${fresh.map((c) => `<span class="cp-code">${fmtCode(c.code)}</span>`).join('')}
-      <div class="acts" style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn small primary" data-cpshare-new>📤 보내기 (카톡 등)</button>
-        <button class="btn small" data-cpcopy-new>📋 복사</button>
-        <button class="btn small" data-cpclose-new>닫기</button></div></div>` : '';
-  box.innerHTML = freshHtml + (list.map((c) => {
-    const [cls, label] = couponState(c);
+  const f = $('#psFilter').value;
+  const active = S.passes.filter((p) => p.status === 'active' && !isExpired(p));
+  const usedToday = S.passes.filter((p) => p.status === 'used' && new Date(p.used_at).toDateString() === new Date().toDateString());
+  $('#psSummary').textContent = `사용 전 ${active.length}장 (${fmtMin(active.reduce((a, p) => a + p.minutes, 0))}) · 오늘 사용 ${usedToday.length}장`;
+  const list = S.passes.filter((p) => f === 'all' || (f === 'active' ? p.status === 'active' && !isExpired(p) : p.status === 'used'));
+  box.innerHTML = list.map((p) => {
+    const [cls, label] = passState(p);
     const info = [
-      `${fmtMin(c.minutes)}`,
-      c.holder ? `받은 손님: ${esc(c.holder)}` : '',
-      c.note ? esc(c.note) : '',
-      `발행 ${ymd(c.created_at)}`,
-      c.expires_at && c.status === 'active' ? `기한 ${ymd(c.expires_at)}까지` : '',
-      c.status === 'used' ? `${esc(c.used_seat_name || '')}에서 ${ymd(c.used_at)} ${hm(c.used_at)} 사용` : '',
+      p.status === 'used' ? `${esc(p.used_seat_name || seatName(p.seat_id))}에서 ${ymd(p.used_at)} ${hm(p.used_at)} 사용` : `${esc(seatName(p.seat_id))} 보유`,
+      p.holder ? `손님: ${esc(p.holder)}` : '', p.note ? esc(p.note) : '',
+      `준 날 ${ymd(p.created_at)}`, p.expires_at && cls === 'active' ? `${ymd(p.expires_at)}까지` : '',
     ].filter(Boolean).join(' · ');
     return `<div class="row ${cls === 'active' ? '' : 'cp-done'}">
-      <div class="grow"><span class="cp-code">${fmtCode(c.code)}</span> <span class="cp-st ${cls}">${label}</span>
+      <div class="grow"><span class="ps-min">🎟 ${fmtMin(p.minutes)}</span> <span class="cp-st ${cls}">${label}</span>
         <div class="meta">${info}</div></div>
       <div class="acts">
-        ${cls === 'active' ? `<button class="btn small primary" data-cpshare="${c.id}">📤 보내기</button><button class="btn small" data-cpcopy="${c.id}">📋 복사</button>
-          <button class="btn small" data-cpholder="${c.id}">받은 손님</button><button class="btn small danger" data-cpcancel="${c.id}">취소</button>` : ''}
-        ${cls !== 'active' ? `<button class="btn small" data-cpdel="${c.id}">기록 삭제</button>` : ''}
+        ${cls === 'active' ? `<select data-psmove="${p.id}" title="다른 PC로 옮기기">${seatOptions(p.seat_id)}</select>
+          <button class="btn small danger" data-pscancel="${p.id}">취소</button>` : `<button class="btn small" data-psdel="${p.id}">기록 삭제</button>`}
       </div></div>`;
-  }).join('') || `<p class="empty">${f === 'active' ? '사용 가능한 쿠폰이 없습니다.<br>위에서 쿠폰을 발행해 보세요.' : '쿠폰이 없습니다.'}</p>`);
-  const byId = (id) => S.coupons.find((c) => String(c.id) === String(id));
-  const newText = () => fresh.map(couponText).join('\n\n');
-  const sn = $('[data-cpshare-new]'); if (sn) sn.onclick = () => (fresh.length === 1 ? shareCoupon(fresh[0]) : navigator.share ? navigator.share({ text: newText() }).catch(() => {}) : copyText(newText()));
-  const cn = $('[data-cpcopy-new]'); if (cn) cn.onclick = () => copyText(newText());
-  const xn = $('[data-cpclose-new]'); if (xn) xn.onclick = () => { lastIssued = []; renderCoupons(); };
-  $$('[data-cpshare]').forEach((b) => (b.onclick = () => shareCoupon(byId(b.dataset.cpshare))));
-  $$('[data-cpcopy]').forEach((b) => (b.onclick = () => copyText(couponText(byId(b.dataset.cpcopy)))));
-  $$('[data-cpholder]').forEach((b) => (b.onclick = async () => {
-    const c = byId(b.dataset.cpholder);
-    const v = prompt('이 쿠폰을 받은 손님 (비우면 지움)', c.holder || ''); if (v === null) return;
-    const { error } = await sb.from('coupons').update({ holder: v.trim() || null }).eq('id', c.id);
-    if (error) return toast(error.message);
-    c.holder = v.trim() || null; renderCoupons();
+  }).join('') || `<p class="empty">${f === 'active' ? '아직 사용하지 않은 이용권이 없습니다.' : '이용권이 없습니다.'}</p>`;
+  const byId = (id) => S.passes.find((p) => String(p.id) === String(id));
+  $$('[data-psmove]').forEach((sel) => (sel.onchange = async () => {
+    const p = byId(sel.dataset.psmove);
+    if (!confirm(`이 이용권을 ${seatName(sel.value)}(으)로 옮길까요?`)) { sel.value = p.seat_id; return; }
+    const { error } = await sb.from('passes').update({ seat_id: sel.value }).eq('id', p.id).eq('status', 'active');
+    if (error) { sel.value = p.seat_id; return toast(error.message); }
+    p.seat_id = sel.value; renderPasses(); toast('옮겼습니다.');
   }));
-  $$('[data-cpcancel]').forEach((b) => (b.onclick = async () => {
-    const c = byId(b.dataset.cpcancel);
-    if (!confirm(`쿠폰 ${fmtCode(c.code)} (${fmtMin(c.minutes)})을 취소할까요? 취소하면 손님이 쓸 수 없습니다.`)) return;
-    const { error } = await sb.from('coupons').update({ status: 'canceled' }).eq('id', c.id).eq('status', 'active');
+  $$('[data-pscancel]').forEach((b) => (b.onclick = async () => {
+    const p = byId(b.dataset.pscancel);
+    if (!confirm(`${seatName(p.seat_id)}의 ${fmtMin(p.minutes)} 이용권을 취소할까요?`)) return;
+    const { error } = await sb.from('passes').update({ status: 'canceled' }).eq('id', p.id).eq('status', 'active');
     if (error) return toast(error.message);
-    c.status = 'canceled'; renderCoupons();
+    p.status = 'canceled'; renderPasses();
   }));
-  $$('[data-cpdel]').forEach((b) => (b.onclick = async () => {
-    if (!confirm('이 쿠폰 기록을 삭제할까요?')) return;
-    const id = b.dataset.cpdel;
-    const { error } = await sb.from('coupons').delete().eq('id', id);
+  $$('[data-psdel]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 이용권 기록을 삭제할까요?')) return;
+    const { error } = await sb.from('passes').delete().eq('id', b.dataset.psdel);
     if (error) return toast(error.message);
-    S.coupons = S.coupons.filter((c) => String(c.id) !== String(id)); renderCoupons();
+    S.passes = S.passes.filter((p) => String(p.id) !== String(b.dataset.psdel)); renderPasses();
   }));
 }
 

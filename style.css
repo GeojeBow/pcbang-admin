@@ -147,7 +147,7 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .mver { font-size: 12px; color: var(--muted, #94a3b8); margin: 4px 0 8px; }
 .tin input::placeholder { font-weight: 400; font-size: 18px; color: var(--muted); opacity: .6; }
 
-/* 추가이용쿠폰 */
+/* 추가 이용권 */
 .cp-issue { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
 .cp-title { font-weight: 800; font-size: 17px; }
 .cp-hint { color: var(--muted); font-size: 13px; margin: 4px 0 12px; line-height: 1.5; }
@@ -162,13 +162,13 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .cp-row label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .cp-row input { width: 70px; }
 .cp-form .btn.wide { margin-top: 4px; }
-.cp-code { font-family: Consolas, "SF Mono", monospace; font-size: 20px; font-weight: 800; letter-spacing: 2px; }
+.ps-min { font-size: 20px; font-weight: 800; }
 .row.cp-done { opacity: .65; }
+.row select { max-width: 140px; }
 .cp-st { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
-.cp-st.active { background: #dcfce7; color: #166534; } .cp-st.used { background: #dbeafe; color: #1e40af; } .cp-st.canceled, .cp-st.expired { background: var(--soft); color: var(--muted); }
+.cp-st.active { background: #dcfce7; color: #166534; } .cp-st.used { background: #dbeafe; color: #1e40af; }
 @media (prefers-color-scheme: dark) { .cp-st.active { background: #14532d; color: #bbf7d0; } .cp-st.used { background: #1e3a8a; color: #bfdbfe; } }
-.cp-new { border: 2px dashed var(--primary); border-radius: 14px; padding: 14px; margin-bottom: 16px; background: var(--card); }
-.cp-new .cp-code { font-size: 26px; display: block; margin: 6px 0; }
+.ps-seat { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--soft); border-radius: 10px; padding: 8px 12px; margin-top: 10px; font-size: 14px; }
 
 /* 화면 크게 보기 */
 .live { cursor: zoom-in; }

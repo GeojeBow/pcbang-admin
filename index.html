@@ -51,6 +51,7 @@
       <button data-tab="orders"><span>🍜</span>주문<b class="badge" id="orderBadge"></b></button>
       <button data-tab="chats"><span>💬</span>채팅<b class="badge" id="chatBadge"></b></button>
       <button data-tab="menu"><span>📋</span>메뉴</button>
+      <button data-tab="passes"><span>🎟</span>이용권</button>
     </nav>
 
     <main>
@@ -80,6 +81,27 @@
           <button class="btn small primary" id="addMenu">+ 메뉴 추가</button></div>
         <div id="menuList" class="list"></div>
       </div>
+      <div class="pane" id="pane-passes">
+        <div class="cp-issue">
+          <div class="cp-title">🎟 추가 이용권 주기</div>
+          <div class="cp-hint">이용권을 손님 PC에 넣어 주면, 손님이 원할 때 그 PC에서 <b>🎟 이용권 → 사용하기</b>를 눌러 그 시간만큼 추가로 사용할 수 있어요. 이용권은 한 번만 쓸 수 있습니다.</div>
+          <div class="cp-form">
+            <select id="psSeat"></select>
+            <label class="cp-min"><input type="number" id="psMin" inputmode="numeric" min="1" max="1440" placeholder="예: 60"><span>분</span></label>
+            <div class="cp-quick"><button class="btn small" data-psmin="30">30분</button><button class="btn small" data-psmin="60">1시간</button><button class="btn small" data-psmin="120">2시간</button><button class="btn small" data-psmin="180">3시간</button></div>
+            <input id="psHolder" maxlength="30" placeholder="받는 손님 이름 (선택, 예: 민수)">
+            <input id="psNote" maxlength="60" placeholder="메모 (선택, 예: 생일 선물)">
+            <div class="cp-row">
+              <label>유효기간 <select id="psExp"><option value="0">기한 없음</option><option value="7">7일</option><option value="30">30일</option><option value="90">90일</option><option value="365">1년</option></select></label>
+              <label>장수 <input type="number" id="psCount" min="1" max="20" value="1" inputmode="numeric"></label>
+            </div>
+            <button class="btn primary wide" id="psGive">이용권 주기</button>
+          </div>
+        </div>
+        <div class="toolbar"><div class="summary" id="psSummary"></div>
+          <select id="psFilter"><option value="active">사용 전</option><option value="used">사용됨</option><option value="all">전체</option></select></div>
+        <div id="passList" class="list"></div>
+      </div>
     </main>
   </section>
 
@@ -104,6 +126,7 @@
           <button class="btn" id="mAdjAdd">＋ 추가</button>
           <button class="btn warn" id="mAdjSub">－ 빼기</button>
         </div>
+        <div class="ps-seat"><span id="mPasses">이용권 없음</span><button class="btn small" id="mGivePass">🎟 이용권 주기</button></div>
         <div class="ctl-title">제어</div>
         <div class="ctl ctl4">
           <button class="btn" data-cmd="lock">🔒 잠금</button>

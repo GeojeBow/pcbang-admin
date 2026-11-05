@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.4.0';
-const APP_UPDATED = '2026-11-01 10:48';
+const APP_VERSION = '1.5.0';
+const APP_UPDATED = '2026-11-05 11:50';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -29,6 +29,7 @@ const S = {
   orders: [],
   messages: new Map(),  // seatId -> [rows]
   menu: [],
+  passes: [],           // 추가 이용권 (null = 아직 SQL 설정 안 됨)
   pending: new Map(),   // seatId -> [commands 미실행]
   openSeat: null,
   openChat: null,
@@ -122,6 +123,8 @@ async function loadAll() {
   S.menu = menu.data || [];
   S.pending = new Map();
   for (const c of cmds.data || []) addPending(c);
+  const ps = await sb.from('passes').select('*').order('created_at', { ascending: false }).limit(500);
+  S.passes = ps.error ? null : ps.data || [];
 }
 function pushMsg(m) {
   const list = S.messages.get(m.seat_id) || [];
@@ -195,6 +198,19 @@ async function subscribe() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'menu' }, async () => {
       const { data } = await sb.from('menu').select('*').order('sort').order('id');
       S.menu = data || []; renderMenu();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'passes' }, (p) => {
+      if (!S.passes) return;
+      if (p.eventType === 'DELETE') S.passes = S.passes.filter((x) => x.id !== p.old.id);
+      else {
+        const i = S.passes.findIndex((x) => x.id === p.new.id);
+        const before = i >= 0 ? S.passes[i] : null;
+        if (i >= 0) S.passes[i] = p.new; else S.passes.unshift(p.new);
+        if (before && before.status !== 'used' && p.new.status === 'used') {
+          alertUser('order', `🎟 ${p.new.used_seat_name || 'PC'}에서 이용권 ${fmtMin(p.new.minutes)}${p.new.holder ? ` (${p.new.holder})` : ''}을 사용했습니다.`, p.new.seat_id);
+        }
+      }
+      renderPasses(); renderModal();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'commands' }, (p) => {
       if (p.eventType === 'DELETE') {
@@ -274,7 +290,7 @@ function sortedSeats() {
   return [...S.seats.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
 }
 
-function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); }
+function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); }
 
 function renderSeats() {
   const seats = sortedSeats();
@@ -369,6 +385,8 @@ function renderModal() {
   $$('[data-cancel]').forEach((b) => (b.onclick = () => cancelCommands(id, [Number(b.dataset.cancel)])));
   const all = $('[data-cancel-all]'); if (all) all.onclick = () => { if (confirm('대기 중인 명령을 모두 취소할까요?')) cancelCommands(id, pend.map((c) => c.id)); };
   $('#mDelete').disabled = isOnline(s);
+  const mine = activePassesOf(id);
+  $('#mPasses').textContent = S.passes == null ? '이용권: SQL 설정 필요' : mine.length ? `🎟 이용권 ${mine.length}장 보유 (${fmtMin(mine.reduce((a, p) => a + p.minutes, 0))})` : '이용권 없음';
   renderChatBox($('#mChat'), id);
 }
 
@@ -588,6 +606,96 @@ $('#addMenu').onclick = async () => {
   const { error } = await sb.from('menu').insert({ name: name.trim().slice(0, 40), price, sort });
   if (error) toast(error.message);
 };
+
+// ---------- 추가 이용권 ----------
+const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`; };
+const isExpired = (p) => p.status === 'active' && p.expires_at && new Date(p.expires_at) < new Date();
+const activePassesOf = (seatId) => (S.passes || []).filter((p) => p.seat_id === seatId && p.status === 'active' && !isExpired(p));
+const seatName = (id) => S.seats.get(id)?.name || '(삭제된 PC)';
+function passState(p) {
+  if (isExpired(p)) return ['expired', '기한 지남'];
+  return { active: ['active', '사용 전'], used: ['used', '사용됨'], canceled: ['canceled', '취소됨'] }[p.status] || ['', p.status];
+}
+function seatOptions(selected) {
+  return sortedSeats().map((s) => `<option value="${s.id}" ${s.id === selected ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+}
+$$('[data-psmin]').forEach((b) => (b.onclick = () => { $('#psMin').value = b.dataset.psmin; }));
+$('#psFilter').onchange = renderPasses;
+$('#mGivePass').onclick = () => {
+  const id = S.openSeat; closeSeat(); showTab('passes');
+  renderPasses(); $('#psSeat').value = id; $('#psMin').focus();
+};
+$('#psGive').onclick = async () => {
+  if (!S.passes) return toast('이용권 기능을 쓰려면 Supabase에서 이용권 SQL을 먼저 실행해야 합니다.', 'call');
+  const seat_id = $('#psSeat').value;
+  if (!seat_id) return toast('이용권을 줄 PC를 고르세요.');
+  const minutes = Math.min(1440, Math.max(0, parseInt($('#psMin').value, 10) || 0));
+  if (!minutes) { toast('이용권 시간을 분으로 입력하세요.'); $('#psMin').focus(); return; }
+  const count = Math.min(20, Math.max(1, parseInt($('#psCount').value, 10) || 1));
+  const days = Number($('#psExp').value) || 0;
+  const holder = $('#psHolder').value.trim() || null, note = $('#psNote').value.trim() || null;
+  if (!confirm(`${seatName(seat_id)}에 ${fmtMin(minutes)} 이용권 ${count}장을 줄까요?${holder ? `\n받는 손님: ${holder}` : ''}`)) return;
+  const expires_at = days ? new Date(Date.now() + days * 86400_000).toISOString() : null;
+  $('#psGive').disabled = true;
+  const rows = Array.from({ length: count }, () => ({ seat_id, minutes, holder, note, expires_at }));
+  const { data, error } = await sb.from('passes').insert(rows).select();
+  $('#psGive').disabled = false;
+  if (error) return toast('실패: ' + error.message, 'timeout');
+  for (const p of data) if (!S.passes.some((x) => x.id === p.id)) S.passes.unshift(p);
+  $('#psMin').value = ''; $('#psHolder').value = ''; $('#psNote').value = ''; $('#psCount').value = 1; $('#psFilter').value = 'active';
+  renderPasses(); toast(`${seatName(seat_id)}에 이용권 ${data.length}장을 넣었습니다.`);
+};
+function renderPasses() {
+  const keep = $('#psSeat').value;
+  $('#psSeat').innerHTML = '<option value="">받을 손님 PC 선택</option>' + seatOptions(keep);
+  const box = $('#passList');
+  if (!S.passes) {
+    $('#psSummary').textContent = '';
+    box.innerHTML = '<p class="empty">이용권 기능을 쓰려면 Supabase <b>SQL Editor</b>에서 <b>이용권 SQL</b>을 한 번 실행해야 합니다.</p>';
+    return;
+  }
+  const f = $('#psFilter').value;
+  const active = S.passes.filter((p) => p.status === 'active' && !isExpired(p));
+  const usedToday = S.passes.filter((p) => p.status === 'used' && new Date(p.used_at).toDateString() === new Date().toDateString());
+  $('#psSummary').textContent = `사용 전 ${active.length}장 (${fmtMin(active.reduce((a, p) => a + p.minutes, 0))}) · 오늘 사용 ${usedToday.length}장`;
+  const list = S.passes.filter((p) => f === 'all' || (f === 'active' ? p.status === 'active' && !isExpired(p) : p.status === 'used'));
+  box.innerHTML = list.map((p) => {
+    const [cls, label] = passState(p);
+    const info = [
+      p.status === 'used' ? `${esc(p.used_seat_name || seatName(p.seat_id))}에서 ${ymd(p.used_at)} ${hm(p.used_at)} 사용` : `${esc(seatName(p.seat_id))} 보유`,
+      p.holder ? `손님: ${esc(p.holder)}` : '', p.note ? esc(p.note) : '',
+      `준 날 ${ymd(p.created_at)}`, p.expires_at && cls === 'active' ? `${ymd(p.expires_at)}까지` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="row ${cls === 'active' ? '' : 'cp-done'}">
+      <div class="grow"><span class="ps-min">🎟 ${fmtMin(p.minutes)}</span> <span class="cp-st ${cls}">${label}</span>
+        <div class="meta">${info}</div></div>
+      <div class="acts">
+        ${cls === 'active' ? `<select data-psmove="${p.id}" title="다른 PC로 옮기기">${seatOptions(p.seat_id)}</select>
+          <button class="btn small danger" data-pscancel="${p.id}">취소</button>` : `<button class="btn small" data-psdel="${p.id}">기록 삭제</button>`}
+      </div></div>`;
+  }).join('') || `<p class="empty">${f === 'active' ? '아직 사용하지 않은 이용권이 없습니다.' : '이용권이 없습니다.'}</p>`;
+  const byId = (id) => S.passes.find((p) => String(p.id) === String(id));
+  $$('[data-psmove]').forEach((sel) => (sel.onchange = async () => {
+    const p = byId(sel.dataset.psmove);
+    if (!confirm(`이 이용권을 ${seatName(sel.value)}(으)로 옮길까요?`)) { sel.value = p.seat_id; return; }
+    const { error } = await sb.from('passes').update({ seat_id: sel.value }).eq('id', p.id).eq('status', 'active');
+    if (error) { sel.value = p.seat_id; return toast(error.message); }
+    p.seat_id = sel.value; renderPasses(); toast('옮겼습니다.');
+  }));
+  $$('[data-pscancel]').forEach((b) => (b.onclick = async () => {
+    const p = byId(b.dataset.pscancel);
+    if (!confirm(`${seatName(p.seat_id)}의 ${fmtMin(p.minutes)} 이용권을 취소할까요?`)) return;
+    const { error } = await sb.from('passes').update({ status: 'canceled' }).eq('id', p.id).eq('status', 'active');
+    if (error) return toast(error.message);
+    p.status = 'canceled'; renderPasses();
+  }));
+  $$('[data-psdel]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 이용권 기록을 삭제할까요?')) return;
+    const { error } = await sb.from('passes').delete().eq('id', b.dataset.psdel);
+    if (error) return toast(error.message);
+    S.passes = S.passes.filter((p) => String(p.id) !== String(b.dataset.psdel)); renderPasses();
+  }));
+}
 
 // ---------- 알림 ----------
 let audioCtx = null;

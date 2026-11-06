@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.5.0';
-const APP_UPDATED = '2026-11-05 11:50';
+const APP_VERSION = '1.6.0';
+const APP_UPDATED = '2026-11-07 06:30';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -283,6 +283,7 @@ const unreadOf = (seatId) => (S.messages.get(seatId) || []).filter((m) => m.send
 function showTab(t) {
   $$('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
   $$('.pane').forEach((p) => p.classList.toggle('on', p.id === 'pane-' + t));
+  if (t === 'usage') loadUsage();
 }
 $$('#tabs button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
@@ -290,7 +291,7 @@ function sortedSeats() {
   return [...S.seats.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
 }
 
-function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); }
+function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); if ($('#pane-usage').classList.contains('on')) loadUsage(); }
 
 function renderSeats() {
   const seats = sortedSeats();
@@ -388,6 +389,7 @@ function renderModal() {
   const mine = activePassesOf(id);
   $('#mPasses').textContent = S.passes == null ? '이용권: SQL 설정 필요' : mine.length ? `🎟 이용권 ${mine.length}장 보유 (${fmtMin(mine.reduce((a, p) => a + p.minutes, 0))})` : '이용권 없음';
   renderChatBox($('#mChat'), id);
+  renderSeatUsageLine(id);
 }
 
 // 시간 입력: 분 칸 하나에 숫자로 입력 (예: 90 = 1시간 30분)
@@ -435,7 +437,7 @@ $('#mRenameBtn').onclick = async () => {
 };
 $('#mDelete').onclick = async () => {
   const s = S.seats.get(S.openSeat);
-  if (!confirm(`${s.name}을(를) 목록에서 삭제할까요? 채팅/주문 기록도 지워집니다.`)) return;
+  if (!confirm(`${s.name}을(를) 목록에서 삭제할까요? 채팅/주문/사용 기록도 지워집니다.`)) return;
   const { error } = await sb.from('seats').delete().eq('id', s.id);
   if (error) return toast(error.message);
   S.seats.delete(s.id); closeSeat(); renderSeats();
@@ -695,6 +697,163 @@ function renderPasses() {
     if (error) return toast(error.message);
     S.passes = S.passes.filter((p) => String(p.id) !== String(b.dataset.psdel)); renderPasses();
   }));
+}
+
+// ---------- 사용 기록 ----------
+// 손님 PC가 1분마다 올리는 기록: use_sessions(실제 사용), power_log(켜짐/꺼짐)
+const UG = { seat: '', date: null, sessions: [], powers: [], error: null, loading: false, at: 0, today: new Map() };
+const p2 = (n) => String(n).padStart(2, '0');
+const hm24 = (t) => { const d = new Date(t); return `${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+const dayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const ymdKey = (d) => { d = new Date(d); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+function dur(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  if (sec < 60) return `${sec}초`;
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return [h ? `${h}시간` : '', m ? `${m}분` : ''].filter(Boolean).join(' ') || '0분';
+}
+const hShort = (sec) => (sec >= 3600 ? `${(sec / 3600).toFixed(sec >= 36000 ? 0 : 1)}h` : `${Math.round(sec / 60)}m`);
+const UG_REASON = { time_up: '시간을 다 씀', admin_lock: '관리자가 잠금', admin_end: '관리자가 사용 종료', power: 'PC 끔', sleep: '절전', lost: '갑자기 꺼짐', quit: '프로그램 종료', lock: '잠김' };
+const UG_OFF = { shutdown: '정상 종료', restart: '다시 시작', sleep: '절전', lost: '갑자기 꺼짐 (전원·강제 종료)', quit: '프로그램 종료' };
+const fresh = (t) => Date.now() - new Date(t).getTime() < 3 * 60_000; // 1분마다 갱신되므로 3분 안이면 아직 진행 중
+const sessLive = (s) => !s.ended_at && fresh(s.last_seen);
+const powerOn = (p) => !p.off_at && fresh(p.last_seen);
+const sessEnd = (s) => s.ended_at || s.last_seen;
+function addApps(into, apps) { for (const [k, v] of Object.entries(apps || {})) into[k] = (into[k] || 0) + v; return into; }
+
+UG.date = dayStart(new Date());
+$('#ugDate').value = ymdKey(UG.date);
+$('#ugDate').onchange = () => { if ($('#ugDate').value) { UG.date = dayStart($('#ugDate').value + 'T00:00:00'); loadUsage(); } };
+$('#ugPrev').onclick = () => { UG.date = addDays(UG.date, -1); $('#ugDate').value = ymdKey(UG.date); loadUsage(); };
+$('#ugNext').onclick = () => { UG.date = addDays(UG.date, 1); $('#ugDate').value = ymdKey(UG.date); loadUsage(); };
+$('#ugToday').onclick = () => { UG.date = dayStart(new Date()); $('#ugDate').value = ymdKey(UG.date); loadUsage(); };
+$('#ugSeat').onchange = () => { UG.seat = $('#ugSeat').value; loadUsage(); };
+$('#mUsage').onclick = () => {
+  const id = S.openSeat; closeSeat();
+  UG.seat = id; UG.date = dayStart(new Date()); $('#ugDate').value = ymdKey(UG.date);
+  showTab('usage');
+};
+
+// 선택한 날짜까지 7일치를 한 번에 읽는다
+async function loadUsage() {
+  if (!sb) return;
+  const from = addDays(UG.date, -6), to = addDays(UG.date, 1);
+  UG.loading = true; renderUsage();
+  let q1 = sb.from('use_sessions').select('*').gte('started_at', from.toISOString()).lt('started_at', to.toISOString()).order('started_at', { ascending: false }).limit(3000);
+  let q2 = sb.from('power_log').select('*').gte('on_at', addDays(from, -1).toISOString()).lt('on_at', to.toISOString()).order('on_at', { ascending: false }).limit(3000);
+  if (UG.seat) { q1 = q1.eq('seat_id', UG.seat); q2 = q2.eq('seat_id', UG.seat); }
+  const [a, b] = await Promise.all([q1, q2]);
+  UG.error = a.error || b.error || null;
+  UG.sessions = a.data || []; UG.powers = b.data || [];
+  UG.loading = false; UG.at = Date.now();
+  renderUsage();
+}
+// 기록 탭을 보고 있으면 30초마다 새로 읽는다 (사용 중인 PC는 1분마다 기록을 올림)
+setInterval(() => {
+  if (!document.hidden && $('#pane-usage').classList.contains('on') && Date.now() - UG.at > 30_000 && !UG.loading) loadUsage();
+}, 5000);
+
+function sessionHtml(s, showSeat) {
+  const live = sessLive(s);
+  const end = live ? '지금' : hm24(sessEnd(s));
+  const meta = [
+    s.granted_sec != null ? `받은 시간 ${dur(s.granted_sec)}` : '자유 이용',
+    s.granted_sec != null && !live && s.granted_sec - s.used_sec >= 60 ? `남긴 시간 ${dur(s.granted_sec - s.used_sec)}` : '',
+    live ? '<b style="color:var(--ok)">사용 중</b>' : s.ended_at ? (UG_REASON[s.end_reason] || '') : `<span class="ug-warn">기록 끊김 (마지막 ${hm24(s.last_seen)})</span>`,
+  ].filter(Boolean).join(' · ');
+  const apps = Object.entries(s.apps || {}).sort((a, b) => b[1] - a[1]).filter(([, v]) => v >= 30).slice(0, 8);
+  return `<div class="ug-s ${live ? 'now' : ''}"><div class="h"><span>${showSeat ? `<span class="ug-tag">${esc(s.seat_name || seatName(s.seat_id))}</span>` : ''}🎮 ${hm24(s.started_at)} ~ ${end}</span><span class="used">${dur(s.used_sec)} 사용</span></div>
+    <div class="meta">${meta}</div>
+    ${apps.length ? `<div class="ug-chips">${apps.map(([k, v]) => `<span class="ug-chip">${esc(k)} <b>${dur(v)}</b></span>`).join('')}</div>` : ''}</div>`;
+}
+function powerHtml(p, showSeat) {
+  const on = powerOn(p);
+  const off = on ? '<b style="color:var(--ok)">지금 켜져 있음</b>'
+    : p.off_at ? `꺼짐 ${hm24(p.off_at)} · ${UG_OFF[p.off_kind] || '꺼짐'}` : `<span class="ug-warn">꺼짐 ${hm24(p.last_seen)}쯤 (기록 끊김)</span>`;
+  const len = (on ? Date.now() : new Date(p.off_at || p.last_seen).getTime()) - new Date(p.on_at).getTime();
+  return `<div class="ug-p">${showSeat ? `<span class="ug-tag">${esc(p.seat_name || seatName(p.seat_id))}</span>` : ''}⏻ 켜짐 ${hm24(p.on_at)} → ${off} <span style="opacity:.8">(${dur(len / 1000)})</span></div>`;
+}
+// 그날 PC가 켜져 있던 시간 (자정을 넘긴 부분은 잘라서)
+function powerSecIn(p, from, to) {
+  const a = Math.max(new Date(p.on_at).getTime(), from.getTime());
+  const b = Math.min(powerOn(p) ? Date.now() : new Date(p.off_at || p.last_seen).getTime(), to.getTime());
+  return Math.max(0, (b - a) / 1000);
+}
+
+function renderUsage() {
+  const keep = UG.seat;
+  $('#ugSeat').innerHTML = '<option value="">전체 PC</option>' + seatOptions(keep);
+  $('#ugSeat').value = keep;
+  const box = $('#ugBody');
+  if (UG.error) {
+    const missing = /does not exist|schema cache|not find/i.test(UG.error.message || '');
+    box.innerHTML = missing
+      ? '<p class="empty">사용 기록을 쓰려면 Supabase <b>SQL Editor</b>에서 <b>사용기록 SQL</b>을 한 번 실행해야 합니다.</p>'
+      : `<p class="empty">기록을 읽지 못했습니다: ${esc(UG.error.message)}</p>`;
+    return;
+  }
+  if (UG.loading && !UG.at) { box.innerHTML = '<p class="empty">불러오는 중…</p>'; return; }
+  const showSeat = !UG.seat;
+  const from = UG.date, to = addDays(UG.date, 1);
+  const inDay = (t) => { const x = new Date(t); return x >= from && x < to; };
+  const daySess = UG.sessions.filter((s) => inDay(s.started_at));
+  const dayPow = UG.powers.filter((p) => powerSecIn(p, from, to) > 0 || inDay(p.on_at));
+
+  // 7일 막대
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(UG.date, i - 6), e = addDays(d, 1);
+    const sec = UG.sessions.filter((s) => { const x = new Date(s.started_at); return x >= d && x < e; }).reduce((a, s) => a + (s.used_sec || 0), 0);
+    return { d, sec };
+  });
+  const maxW = Math.max(3600, ...week.map((w) => w.sec));
+  const weekHtml = `<div class="ug-card"><h3>최근 7일 실제 사용 시간 <small>${showSeat ? '전체 PC 합계' : esc(seatName(UG.seat))} · 막대를 누르면 그날 기록</small></h3>
+    <div class="ug-week">${week.map((w) => `<button class="ug-wd ${ymdKey(w.d) === ymdKey(UG.date) ? 'on' : ''}" data-ugday="${ymdKey(w.d)}">
+      <span class="v">${w.sec ? hShort(w.sec) : ''}</span><span class="bar" style="height:${Math.round((w.sec / maxW) * 90)}px"></span>
+      <span class="d">${'일월화수목금토'[w.d.getDay()]} ${w.d.getDate()}</span></button>`).join('')}</div></div>`;
+
+  // PC별 그날 요약
+  const seatIds = UG.seat ? [UG.seat] : [...new Set([...daySess.map((s) => s.seat_id), ...dayPow.map((p) => p.seat_id)])];
+  const d = UG.date;
+  const title = `${d.getMonth() + 1}월 ${d.getDate()}일 (${'일월화수목금토'[d.getDay()]})${ymdKey(d) === ymdKey(new Date()) ? ' · 오늘' : ''}`;
+  const sumHtml = `<div class="ug-card"><h3>${title} 요약</h3>${seatIds.length ? `<div class="ug-sum">${seatIds.map((id) => {
+    const ss = daySess.filter((s) => s.seat_id === id), ps = dayPow.filter((p) => p.seat_id === id);
+    const used = ss.reduce((a, s) => a + (s.used_sec || 0), 0), on = ps.reduce((a, p) => a + powerSecIn(p, from, to), 0);
+    const name = ss[0]?.seat_name || ps[0]?.seat_name;
+    return `<div class="ug-seat"><b>${esc(S.seats.get(id)?.name || name || '(삭제된 PC)')}</b><div class="big">${dur(used)}</div>
+      <div class="meta">실제 사용 · ${ss.length}번 이용${on ? ` · PC 켜짐 ${dur(on)}` : ''}</div></div>`;
+  }).join('')}</div>` : '<div class="summary">이날은 기록이 없습니다.</div>'}</div>`;
+
+  // 프로그램별
+  const apps = Object.entries(daySess.reduce((a, s) => addApps(a, s.apps), {})).sort((a, b) => b[1] - a[1]).filter(([, v]) => v >= 30);
+  const maxA = apps[0]?.[1] || 1;
+  const appHtml = `<div class="ug-card"><h3>프로그램별 사용 시간 <small>맨 앞에 띄워 놓고 쓴 시간</small></h3>${apps.length
+    ? `<div class="ug-apps">${apps.slice(0, 20).map(([k, v]) => `<div class="ug-app"><span class="n" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill" style="width:${Math.max(2, Math.round((v / maxA) * 100))}%;display:block"></span></span><span class="t">${dur(v)}</span></div>`).join('')}</div>`
+    : '<div class="summary">기록된 프로그램이 없습니다. (손님 PC 프로그램 1.5.0부터 기록됩니다)</div>'}</div>`;
+
+  // 시간순 기록 (최근 것부터)
+  const items = [...daySess.map((s) => ({ t: s.started_at, h: sessionHtml(s, showSeat) })), ...dayPow.map((p) => ({ t: p.on_at, h: powerHtml(p, showSeat) }))]
+    .sort((a, b) => (a.t < b.t ? 1 : -1));
+  const tlHtml = `<div class="ug-card"><h3>이용 기록 <small>🎮 실제 사용 · ⏻ PC 켜짐/꺼짐</small></h3>${items.length ? `<div class="ug-tl">${items.map((x) => x.h).join('')}</div>` : '<div class="summary">이날은 기록이 없습니다.</div>'}</div>`;
+
+  box.innerHTML = weekHtml + sumHtml + appHtml + tlHtml;
+  $$('[data-ugday]').forEach((b) => (b.onclick = () => {
+    UG.date = dayStart(b.dataset.ugday + 'T00:00:00'); $('#ugDate').value = b.dataset.ugday;
+    loadUsage();
+  }));
+}
+
+// 좌석 창: 오늘 실제 사용 시간 한 줄
+async function renderSeatUsageLine(id) {
+  const el = $('#mUsageLine');
+  const c = UG.today.get(id);
+  if (c && Date.now() - c.at < 60_000) { el.textContent = c.text; return; }
+  if (c?.busy) return;
+  UG.today.set(id, { ...(c || {}), busy: true, at: c?.at || 0, text: c?.text || '사용 기록' });
+  const { data, error } = await sb.from('use_sessions').select('used_sec').eq('seat_id', id).gte('started_at', dayStart(new Date()).toISOString()).limit(500);
+  const text = error ? '사용 기록 (SQL 설정 필요)' : `오늘 실제 사용 ${dur((data || []).reduce((a, s) => a + (s.used_sec || 0), 0))} · ${(data || []).length}번`;
+  UG.today.set(id, { at: Date.now(), text, busy: false });
+  if (S.openSeat === id) el.textContent = text;
 }
 
 // ---------- 알림 ----------

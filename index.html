@@ -52,6 +52,7 @@
       <button data-tab="chats"><span>💬</span>채팅<b class="badge" id="chatBadge"></b></button>
       <button data-tab="menu"><span>📋</span>메뉴</button>
       <button data-tab="passes"><span>🎟</span>이용권</button>
+      <button data-tab="usage"><span>📊</span>기록</button>
     </nav>
 
     <main>
@@ -102,6 +103,14 @@
           <select id="psFilter"><option value="active">사용 전</option><option value="used">사용됨</option><option value="all">전체</option></select></div>
         <div id="passList" class="list"></div>
       </div>
+      <div class="pane" id="pane-usage">
+        <div class="ug-bar">
+          <select id="ugSeat"></select>
+          <div class="ug-date"><button class="btn small" id="ugPrev" title="전날">◀</button><input type="date" id="ugDate"><button class="btn small" id="ugNext" title="다음날">▶</button><button class="btn small" id="ugToday">오늘</button></div>
+        </div>
+        <div id="ugBody"></div>
+        <p class="ug-foot">잠금이 풀린 순간부터 다시 잠길 때까지 <b>실제로 사용한 시간</b>만 기록합니다. 1시간을 받아도 40분 쓰고 끄면 40분으로 남습니다. 손님 PC의 📊 사용 기록에도 같은 내용이 보입니다.</p>
+      </div>
     </main>
   </section>
 
@@ -127,6 +136,7 @@
           <button class="btn warn" id="mAdjSub">－ 빼기</button>
         </div>
         <div class="ps-seat"><span id="mPasses">이용권 없음</span><button class="btn small" id="mGivePass">🎟 이용권 주기</button></div>
+        <div class="ps-seat"><span id="mUsageLine">사용 기록</span><button class="btn small" id="mUsage">📊 사용 기록 보기</button></div>
         <div class="ctl-title">제어</div>
         <div class="ctl ctl4">
           <button class="btn" data-cmd="lock">🔒 잠금</button>

@@ -1,7 +1,7 @@
 {
-  "version": "1.4.0",
-  "bundle": "bundle-1.4.0.json",
-  "size": 81270,
-  "sha256": "6b270211081b3634ff53259795483c501ce05b853260cfbe750c4ccbbdc188cd",
-  "date": "2026-11-05T02:36:17.740Z"
+  "version": "1.5.0",
+  "bundle": "bundle-1.5.0.json",
+  "size": 108004,
+  "sha256": "f199551c40920fc5de2024ff41f19d7e6dc2eba523bc7ccf90455b25e0eace17",
+  "date": "2026-11-06T20:59:04.132Z"
 }

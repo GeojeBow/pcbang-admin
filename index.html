@@ -52,6 +52,7 @@
       <button data-tab="chats"><span>💬</span>채팅<b class="badge" id="chatBadge"></b></button>
       <button data-tab="menu"><span>📋</span>메뉴</button>
       <button data-tab="passes"><span>🎟</span>이용권</button>
+      <button data-tab="angels"><span>👼</span>천사</button>
       <button data-tab="usage"><span>📊</span>기록</button>
     </nav>
 
@@ -103,6 +104,30 @@
           <select id="psFilter"><option value="active">사용 전</option><option value="used">사용됨</option><option value="all">전체</option></select></div>
         <div id="passList" class="list"></div>
       </div>
+      <div class="pane" id="pane-angels">
+        <div class="cp-issue ag-issue">
+          <div class="cp-title"><img src="angel-icon.svg" alt="" class="ag-ico"> 수호천사 발동권 주기</div>
+          <div class="cp-hint">아이가 <b>남은 시간 5분 미만</b>일 때 발동하면, 보호 시간만큼 시간이 늘고 그동안 <b>잠금·사용 종료·끄기·재시작·시간 빼기</b>가 막혀요. PC마다 하루 1번만 쓸 수 있어요.<br>
+            보호를 중간에 풀거나 안 쓴 권을 취소하려면 <b>이 권의 비밀번호</b>가 필요해요. 비밀번호는 아이 PC에는 절대 보내지 않아요. 잊어버려도 보호 시간이 끝나면 저절로 풀립니다.</div>
+          <div class="cp-form">
+            <select id="agSeat"></select>
+            <label class="cp-min"><input type="number" id="agMin" inputmode="numeric" min="5" max="60" value="15"><span>분 보호</span></label>
+            <div class="cp-quick"><button class="btn small" data-agmin="10">10분</button><button class="btn small" data-agmin="15">15분</button><button class="btn small" data-agmin="20">20분</button><button class="btn small" data-agmin="30">30분</button></div>
+            <input id="agPw" type="password" maxlength="40" placeholder="해제 비밀번호 (4자 이상)" autocomplete="new-password">
+            <input id="agPw2" type="password" maxlength="40" placeholder="비밀번호 한 번 더" autocomplete="new-password">
+            <input id="agHolder" maxlength="30" placeholder="받는 아이 이름 (선택)">
+            <input id="agNote" maxlength="60" placeholder="메모 (선택, 예: 숙제 다 한 상)">
+            <div class="cp-row">
+              <label>유효기간 <select id="agExp"><option value="0">기한 없음</option><option value="7">7일</option><option value="30">30일</option><option value="90">90일</option></select></label>
+              <label>장수 <input type="number" id="agCount" min="1" max="10" value="1" inputmode="numeric"></label>
+            </div>
+            <button class="btn primary wide ag-btn" id="agGive">👼 발동권 주기</button>
+          </div>
+        </div>
+        <div class="toolbar"><div class="summary" id="agSummary"></div>
+          <select id="agFilter"><option value="active">사용 전</option><option value="used">발동 기록</option><option value="all">전체</option></select></div>
+        <div id="agList" class="list"></div>
+      </div>
       <div class="pane" id="pane-usage">
         <div class="ug-bar">
           <select id="ugSeat"></select>
@@ -124,6 +149,7 @@
       <div class="sheet-body">
         <div class="live" id="mLive"><img id="mFrame" alt=""><span id="mLiveMsg">화면 불러오는 중…</span><span class="zoomhint">🔍 눌러서 크게 보기</span></div>
         <div class="remain"><span>남은 시간</span><b id="mRemain">-</b></div>
+        <div class="ag-banner hidden" id="mAngel"></div>
         <div class="mver" id="mVer"></div>
         <div class="pending hidden" id="mPending"></div>
         <div class="ctl-title">시간 (분으로 입력)</div>
@@ -136,6 +162,7 @@
           <button class="btn warn" id="mAdjSub">－ 빼기</button>
         </div>
         <div class="ps-seat"><span id="mPasses">이용권 없음</span><button class="btn small" id="mGivePass">🎟 이용권 주기</button></div>
+        <div class="ps-seat"><span id="mAngels">수호천사 발동권 없음</span><button class="btn small" id="mGiveAngel">👼 발동권 주기</button></div>
         <div class="ps-seat"><span id="mUsageLine">사용 기록</span><button class="btn small" id="mUsage">📊 사용 기록 보기</button></div>
         <div class="ctl-title">제어</div>
         <div class="ctl ctl4">
@@ -172,6 +199,19 @@
       <div class="sheet-body chat-only">
         <div class="chat" id="cChat"></div>
         <form class="chat-send" id="cChatForm"><input id="cChatText" placeholder="메시지 입력" maxlength="500" autocomplete="off"><button class="btn primary">보내기</button></form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 수호천사 비밀번호 -->
+  <div class="modal hidden" id="agModal">
+    <div class="sheet ag-sheet">
+      <div class="sheet-head"><b id="agmTitle">수호천사 해제</b><button class="icon-btn" id="agmClose">✕</button></div>
+      <div class="sheet-body">
+        <img src="angel-icon.svg" alt="" class="ag-big">
+        <p id="agmText" class="ag-text"></p>
+        <form id="agmForm" class="ag-form"><input id="agmPw" type="password" placeholder="발동권 비밀번호" autocomplete="off" maxlength="40"><button class="btn primary">확인</button></form>
+        <p id="agmErr" class="ag-err"></p>
       </div>
     </div>
   </div>

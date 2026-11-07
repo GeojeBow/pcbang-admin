@@ -33,6 +33,7 @@ public class AlertService extends Service {
 
     private ScheduledExecutorService timer;
     private long lastOrder = -1, lastMsg = -1;
+    private String lastAngel = null; // 마지막으로 본 수호천사 발동 시각
     private final Map<String, String> seatNames = new HashMap<>();
     private final Map<String, Boolean> seatTimedOut = new HashMap<>();
     // 비정상 종료 감지: last_seen 값이 바뀐 마지막 시각(핸드폰 시계 기준, PC 시계가 틀려도 됨)
@@ -234,6 +235,20 @@ public class AlertService extends Service {
             if ("call".equals(m.optString("kind"))) alert("🔔 " + seat + " 호출", seat + "에서 카운터를 호출했어요.");
             else alert("💬 " + seat, m.optString("text"));
         }
+
+        // 수호천사 발동 (SQL을 아직 안 넣었으면 조용히 넘어간다)
+        try {
+            JSONArray ag = Api.getArray(base + "angel_passes?select=id,used_seat_name,minutes,used_at&status=eq.used&order=used_at.desc&limit=5", key, tok);
+            String newest = ag.length() > 0 ? ag.getJSONObject(0).optString("used_at", "") : "";
+            if (lastAngel != null) {
+                for (int i = ag.length() - 1; i >= 0; i--) {
+                    JSONObject a = ag.getJSONObject(i);
+                    if (a.optString("used_at", "").compareTo(lastAngel) > 0)
+                        alert("👼 " + a.optString("used_seat_name", "PC") + " 수호천사 발동", a.optInt("minutes") + "분 동안 잠금·끄기가 막혀요. 풀려면 발동권 비밀번호가 필요해요.");
+                }
+            }
+            lastAngel = newest;
+        } catch (Exception ignored) {}
     }
 
     private long maxId(String url, String key, String tok) throws Exception {

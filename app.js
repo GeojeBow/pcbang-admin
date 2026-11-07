@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.6.0';
-const APP_UPDATED = '2026-11-07 06:30';
+const APP_VERSION = '1.7.0';
+const APP_UPDATED = '2026-11-08 06:40';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -30,6 +30,7 @@ const S = {
   messages: new Map(),  // seatId -> [rows]
   menu: [],
   passes: [],           // 추가 이용권 (null = 아직 SQL 설정 안 됨)
+  angels: [],           // 수호천사 발동권 (null = 아직 SQL 설정 안 됨)
   pending: new Map(),   // seatId -> [commands 미실행]
   openSeat: null,
   openChat: null,
@@ -125,6 +126,8 @@ async function loadAll() {
   for (const c of cmds.data || []) addPending(c);
   const ps = await sb.from('passes').select('*').order('created_at', { ascending: false }).limit(500);
   S.passes = ps.error ? null : ps.data || [];
+  const ag = await sb.from('angel_passes').select('*').order('created_at', { ascending: false }).limit(300);
+  S.angels = ag.error ? null : ag.data || [];
 }
 function pushMsg(m) {
   const list = S.messages.get(m.seat_id) || [];
@@ -212,6 +215,22 @@ async function subscribe() {
       }
       renderPasses(); renderModal();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'angel_passes' }, (p) => {
+      if (!S.angels) return;
+      if (p.eventType === 'DELETE') S.angels = S.angels.filter((x) => x.id !== p.old.id);
+      else {
+        const i = S.angels.findIndex((x) => x.id === p.new.id);
+        const before = i >= 0 ? S.angels[i] : null;
+        if (i >= 0) S.angels[i] = p.new; else S.angels.unshift(p.new);
+        const name = p.new.used_seat_name || seatName(p.new.seat_id);
+        if (before && before.status === 'active' && p.new.status === 'used') {
+          alertUser('call', `👼 ${name}에서 수호천사 발동! ${p.new.minutes}분 동안 잠금·끄기가 막혀요.`, p.new.seat_id);
+        } else if (before && !before.ended_at && p.new.ended_at) {
+          toast(`👼 ${name} 수호천사 보호가 비밀번호로 해제되었습니다.`);
+        }
+      }
+      renderAngels(); renderModal(); renderSeats();
+    })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'commands' }, (p) => {
       if (p.eventType === 'DELETE') {
         for (const [k, l] of S.pending) S.pending.set(k, l.filter((x) => x.id !== p.old.id));
@@ -291,7 +310,7 @@ function sortedSeats() {
   return [...S.seats.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
 }
 
-function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); if ($('#pane-usage').classList.contains('on')) loadUsage(); }
+function renderAll() { renderSeats(); renderOrders(); renderChats(); renderMenu(); renderPasses(); renderAngels(); if ($('#pane-usage').classList.contains('on')) loadUsage(); }
 
 function renderSeats() {
   const seats = sortedSeats();
@@ -302,7 +321,7 @@ function renderSeats() {
     const st = statusOf(s), rem = remainingOf(s), thumb = S.thumbs.get(s.id), un = unreadOf(s.id);
     return `<button class="seat ${st.cls === 'off' ? 'off' : ''}" data-seat="${s.id}">
       <div class="thumb">${thumb && isOnline(s) ? `<img data-thumb="${s.id}" src="${thumb}" alt="">` : `<span>${isOnline(s) ? '화면 대기 중' : '꺼짐'}</span>`}
-        ${isOnline(s) && s.locked ? '<span class="lockico">🔒</span>' : ''}</div>
+        ${isOnline(s) && s.locked ? '<span class="lockico">🔒</span>' : ''}${angelOf(s.id) ? `<span class="ag-tag">👼 보호 <span data-agleft="${s.id}">${agLeft(angelOf(s.id))}</span></span>` : ''}</div>
       <div class="info">
         <div class="name"><span>${esc(s.name)} ${un ? `<b class="badge">${un}</b>` : ''}</span><span class="pill ${st.cls}">${st.label}</span></div>
         <div class="time ${rem != null && rem <= 300 && !s.locked ? 'low' : ''}" data-time="${s.id}">${rem == null ? '자유 이용' : fmtTime(rem)}</div>
@@ -324,6 +343,13 @@ setInterval(() => {
     const s = S.seats.get(S.openSeat);
     if (s) { const rem = remainingOf(s); $('#mRemain').textContent = rem == null ? '자유 이용' : fmtTime(rem); }
   }
+  // 수호천사 남은 보호 시간
+  let ended = false;
+  for (const el of $$('[data-agleft]')) {
+    const a = angelOf(el.dataset.agleft);
+    if (a) el.textContent = agLeft(a); else ended = true;
+  }
+  if (ended) { renderSeats(); renderModal(); renderAngels(); }
 }, 1000);
 // 켜짐/꺼짐 판정 갱신 + 사용 중이던 PC가 갑자기 끊기면 알림 (정상 종료는 PC가 '꺼짐'을 먼저 기록한다)
 const wasInUse = new Map();
@@ -341,8 +367,10 @@ function checkDrops() {
 setInterval(() => { if (!$('#app').classList.contains('hidden')) { checkDrops(); renderSeats(); } }, 15000);
 
 $('#lockAll').onclick = async () => {
-  const targets = sortedSeats().filter((s) => isOnline(s) && !s.locked);
-  if (!targets.length) return toast('사용 중인 PC가 없습니다.');
+  const inUse = sortedSeats().filter((s) => isOnline(s) && !s.locked);
+  const targets = inUse.filter((s) => !angelOf(s.id));
+  if (inUse.length > targets.length) toast(`👼 수호천사 보호 중인 ${inUse.length - targets.length}대는 빼고 잠급니다.`);
+  if (!targets.length) return toast(inUse.length ? '사용 중인 PC가 모두 수호천사 보호 중입니다.' : '사용 중인 PC가 없습니다.');
   if (!confirm(`사용 중인 ${targets.length}대를 모두 잠글까요?`)) return;
   await sb.from('commands').insert(targets.map((s) => ({ seat_id: s.id, cmd: 'lock' })));
 };
@@ -388,6 +416,13 @@ function renderModal() {
   $('#mDelete').disabled = isOnline(s);
   const mine = activePassesOf(id);
   $('#mPasses').textContent = S.passes == null ? '이용권: SQL 설정 필요' : mine.length ? `🎟 이용권 ${mine.length}장 보유 (${fmtMin(mine.reduce((a, p) => a + p.minutes, 0))})` : '이용권 없음';
+  const ag = angelOf(id);
+  $('#mAngel').classList.toggle('hidden', !ag);
+  $('#mAngel').innerHTML = ag ? `<img src="angel-icon.svg" alt=""><div class="grow">👼 <b>수호천사 보호 중</b><br>남은 보호 <b class="left" data-agleft="${id}">${agLeft(ag)}</b><br><small>잠금·종료·끄기·시간 빼기가 막혀 있어요</small></div>
+    <button class="btn small" id="mAngelOff">비밀번호로 해제</button>` : '';
+  if (ag) $('#mAngelOff').onclick = () => releaseAngel(ag);
+  const myAngels = activeAngelsOf(id);
+  $('#mAngels').textContent = S.angels == null ? '수호천사: SQL 설정 필요' : myAngels.length ? `👼 수호천사 발동권 ${myAngels.length}장 보유` : '수호천사 발동권 없음';
   renderChatBox($('#mChat'), id);
   renderSeatUsageLine(id);
 }
@@ -400,6 +435,7 @@ function needInput() { const n = inputMin(); if (!n) { toast('분을 입력하�
 $('#mSet').onclick = () => {
   const n = needInput(); if (!n) return;
   const s = S.seats.get(S.openSeat), m = S.agentVer?.get(S.openSeat);
+  if (angelOf(S.openSeat) && n * 60 < (remainingOf(s) || 0) - 60) return angelBlocked(S.openSeat);
   // 손님 PC 프로그램이 1.2.4보다 예전이면 '설정' 명령을 몰라서, 지금 남은 시간과의 차이만큼 더하기/빼기로 보낸다
   const oldGuest = !m || !m.version || m.version.localeCompare('1.2.4', undefined, { numeric: true }) < 0;
   if (oldGuest && s && isOnline(s)) {
@@ -415,6 +451,7 @@ $('#mAdjAdd').onclick = () => {
 };
 $('#mAdjSub').onclick = () => {
   const n = needInput(); if (!n) return;
+  if (angelOf(S.openSeat)) return angelBlocked(S.openSeat);
   const s = S.seats.get(S.openSeat);
   if (confirm(`${s.name}에서 ${fmtMin(n)}을 뺄까요?`)) { command(S.openSeat, 'addTime', -n); clearInput(); }
 };
@@ -422,6 +459,7 @@ $('#mFree').onclick = () => command(S.openSeat, 'setFree');
 $$('[data-cmd]').forEach((b) => (b.onclick = () => {
   const cmd = b.dataset.cmd;
   const s = S.seats.get(S.openSeat);
+  if (ANGEL_BLOCKED.includes(cmd) && angelOf(S.openSeat)) return angelBlocked(S.openSeat);
   const ask = { shutdown: `${s.name}을(를) 끌까요?`, restart: `${s.name}을(를) 다시 시작할까요?`, endSession: `${s.name} 사용을 종료할까요? 남은 시간이 0이 됩니다.` }[cmd];
   if (ask && !confirm(ask)) return;
   command(S.openSeat, cmd);
@@ -696,6 +734,144 @@ function renderPasses() {
     const { error } = await sb.from('passes').delete().eq('id', b.dataset.psdel);
     if (error) return toast(error.message);
     S.passes = S.passes.filter((p) => String(p.id) !== String(b.dataset.psdel)); renderPasses();
+  }));
+}
+
+// ---------- 수호천사 발동권 ----------
+// 아이가 남은 5분 미만일 때 발동 → 보호 시간 동안 잠금/종료/끄기/시간 빼기가 막힌다. 해제는 그 권의 비밀번호로만.
+const ANGEL_BLOCKED = ['lock', 'endSession', 'shutdown', 'restart'];
+const angelOf = (seatId) => (S.angels || []).find((a) => a.seat_id === seatId && a.status === 'used' && !a.ended_at && new Date(a.protect_until) > new Date());
+const activeAngelsOf = (seatId) => (S.angels || []).filter((a) => a.seat_id === seatId && a.status === 'active' && !(a.expires_at && new Date(a.expires_at) < new Date()));
+function agLeft(a) {
+  const sec = Math.max(0, Math.round((new Date(a.protect_until) - Date.now()) / 1000));
+  return `${Math.floor(sec / 60)}:${p2(sec % 60)}`;
+}
+function angelState(a) {
+  if (a.status === 'active') return a.expires_at && new Date(a.expires_at) < new Date() ? ['expired', '기한 지남'] : ['active', '사용 전'];
+  if (a.status === 'canceled') return ['canceled', '취소됨'];
+  if (a.status === 'used' && !a.ended_at && new Date(a.protect_until) > new Date()) return ['protect', '👼 보호 중'];
+  return ['used', a.end_reason === 'released' ? '비번 해제' : '보호 끝'];
+}
+function angelBlocked(seatId) {
+  const a = angelOf(seatId); if (!a) return;
+  releaseAngel(a, true);
+}
+// 비밀번호 창
+let agmDo = null;
+function askAngelPw(title, text, run) {
+  $('#agmTitle').textContent = title; $('#agmText').innerHTML = text; $('#agmErr').textContent = ''; $('#agmPw').value = '';
+  agmDo = run; $('#agModal').classList.remove('hidden'); setTimeout(() => $('#agmPw').focus(), 50);
+}
+function closeAgm() { agmDo = null; $('#agModal').classList.add('hidden'); }
+$('#agmClose').onclick = closeAgm;
+$('#agModal').onclick = (e) => { if (e.target.id === 'agModal') closeAgm(); };
+$('#agmForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = $('#agmPw').value; if (!pw || !agmDo) return;
+  const btn = $('#agmForm button'); btn.disabled = true;
+  const err = await agmDo(pw).catch((x) => String(x.message || x));
+  btn.disabled = false;
+  if (err) { $('#agmErr').textContent = err; $('#agmPw').select(); } else closeAgm();
+};
+function releaseAngel(a, fromBlock) {
+  const name = a.used_seat_name || seatName(a.seat_id);
+  askAngelPw('👼 수호천사 보호 중', `${fromBlock ? '<b>지금은 끄거나 잠글 수 없어요.</b><br>' : ''}${esc(name)}은(는) 수호천사가 지켜 주고 있어요. (남은 보호 <b>${agLeft(a)}</b>)<br>
+    보호가 끝나면 저절로 풀려요. 지금 풀려면 발동권 비밀번호를 입력하세요.`, async (pw) => {
+    const { data, error } = await sb.rpc('release_angel', { p_id: a.id, p_password: pw });
+    if (error) return error.message;
+    if (!data?.ok) return data?.error || '해제하지 못했습니다.';
+    Object.assign(a, { ended_at: new Date().toISOString(), end_reason: 'released', protect_until: new Date().toISOString() });
+    toast(`👼 ${name} 수호천사 보호를 해제했습니다. 이제 잠그거나 끌 수 있어요.`);
+    renderSeats(); renderModal(); renderAngels();
+  });
+}
+$$('[data-agmin]').forEach((b) => (b.onclick = () => { $('#agMin').value = b.dataset.agmin; }));
+$('#agFilter').onchange = renderAngels;
+$('#mGiveAngel').onclick = () => {
+  const id = S.openSeat; closeSeat(); showTab('angels');
+  renderAngels(); $('#agSeat').value = id; $('#agPw').focus();
+};
+$('#agGive').onclick = async () => {
+  if (!S.angels) return toast('수호천사 기능을 쓰려면 Supabase에서 수호천사 SQL을 먼저 실행해야 합니다.', 'call');
+  const seat = $('#agSeat').value;
+  if (!seat) return toast('발동권을 줄 PC를 고르세요.');
+  const minutes = parseInt($('#agMin').value, 10) || 0;
+  if (minutes < 5 || minutes > 60) { toast('보호 시간은 5~60분으로 정해 주세요.'); return $('#agMin').focus(); }
+  const pw = $('#agPw').value;
+  if (pw.length < 4) { toast('해제 비밀번호를 4자 이상 입력하세요.'); return $('#agPw').focus(); }
+  if (pw !== $('#agPw2').value) { toast('비밀번호가 서로 다릅니다.'); return $('#agPw2').focus(); }
+  const count = Math.min(10, Math.max(1, parseInt($('#agCount').value, 10) || 1));
+  const days = Number($('#agExp').value) || 0;
+  const holder = $('#agHolder').value.trim() || null, note = $('#agNote').value.trim() || null;
+  if (!confirm(`${seatName(seat)}에 수호천사 발동권(보호 ${minutes}분) ${count}장을 줄까요?\n비밀번호를 꼭 기억해 두세요. 비밀번호를 아는 사람만 보호를 풀 수 있어요.`)) return;
+  $('#agGive').disabled = true;
+  const { data, error } = await sb.rpc('issue_angel', { p_seat: seat, p_minutes: minutes, p_password: pw, p_count: count, p_holder: holder, p_note: note,
+    p_expires: days ? new Date(Date.now() + days * 86400_000).toISOString() : null });
+  $('#agGive').disabled = false;
+  if (error) return toast('실패: ' + error.message, 'timeout');
+  if (!data?.ok) return toast(data?.error || '실패했습니다.', 'timeout');
+  const ag = await sb.from('angel_passes').select('*').order('created_at', { ascending: false }).limit(300);
+  if (!ag.error) S.angels = ag.data || [];
+  for (const k of ['agPw', 'agPw2', 'agHolder', 'agNote']) $('#' + k).value = '';
+  $('#agCount').value = 1; $('#agFilter').value = 'active';
+  renderAngels(); renderModal(); toast(`👼 ${seatName(seat)}에 수호천사 발동권 ${data.ids.length}장을 넣었습니다.`);
+};
+function renderAngels() {
+  const keep = $('#agSeat').value;
+  $('#agSeat').innerHTML = '<option value="">받을 아이 PC 선택</option>' + seatOptions(keep);
+  const box = $('#agList');
+  if (!S.angels) {
+    $('#agSummary').textContent = '';
+    box.innerHTML = '<p class="empty">수호천사 기능을 쓰려면 Supabase <b>SQL Editor</b>에서 <b>수호천사 SQL</b>을 한 번 실행해야 합니다.</p>';
+    return;
+  }
+  const f = $('#agFilter').value;
+  const active = S.angels.filter((a) => angelState(a)[0] === 'active');
+  const protecting = S.angels.filter((a) => angelState(a)[0] === 'protect');
+  const month = S.angels.filter((a) => a.used_at && new Date(a.used_at).getMonth() === new Date().getMonth() && new Date(a.used_at).getFullYear() === new Date().getFullYear());
+  $('#agSummary').textContent = `사용 전 ${active.length}장 · 보호 중 ${protecting.length}대 · 이번 달 발동 ${month.length}번`;
+  const list = S.angels.filter((a) => f === 'all' || (f === 'active' ? a.status === 'active' : a.status === 'used'));
+  box.innerHTML = list.map((a) => {
+    const [cls, label] = angelState(a);
+    const usedMin = a.used_at ? Math.round((new Date(a.ended_at || a.protect_until) - new Date(a.used_at)) / 60000) : 0;
+    const info = [
+      a.status === 'used' ? `${esc(a.used_seat_name || seatName(a.seat_id))}에서 ${ymd(a.used_at)} ${hm(a.used_at)} 발동` : `${esc(seatName(a.seat_id))} 보유`,
+      a.status === 'used' && cls !== 'protect' ? (a.end_reason === 'released' ? `${usedMin}분 뒤 ${esc(a.released_by || '관리자')}가 비번으로 해제` : `${a.minutes}분 보호 끝까지`) : '',
+      a.holder ? `받은 아이: ${esc(a.holder)}` : '', a.note ? esc(a.note) : '',
+      `준 날 ${ymd(a.created_at)}${a.issued_by ? ` (${esc(a.issued_by)})` : ''}`, a.expires_at && cls === 'active' ? `${ymd(a.expires_at)}까지` : '',
+    ].filter(Boolean).join(' · ');
+    const acts = cls === 'active' ? `<select data-agmove="${a.id}" title="다른 PC로 옮기기">${seatOptions(a.seat_id)}</select>
+          <button class="btn small danger" data-agcancel="${a.id}">취소(비번)</button>`
+      : cls === 'protect' ? `<button class="btn small danger" data-agoff="${a.id}">해제(비번)</button>`
+      : `<button class="btn small" data-agdel="${a.id}">기록 삭제</button>`;
+    return `<div class="row ${cls === 'active' || cls === 'protect' ? '' : 'cp-done'}">
+      <div class="grow"><span class="ps-min"><img src="angel-icon.svg" alt="" class="ag-ico"> 보호 ${a.minutes}분</span> <span class="cp-st ${cls}">${label}${cls === 'protect' ? ` <span data-agleft="${a.seat_id}">${agLeft(a)}</span>` : ''}</span>
+        <div class="meta">${info}</div></div>
+      <div class="acts">${acts}</div></div>`;
+  }).join('') || `<p class="empty">${f === 'active' ? '아직 사용하지 않은 발동권이 없습니다.' : '기록이 없습니다.'}</p>`;
+  const byId = (id) => S.angels.find((a) => String(a.id) === String(id));
+  $$('[data-agmove]').forEach((sel) => (sel.onchange = async () => {
+    const a = byId(sel.dataset.agmove);
+    if (!confirm(`이 발동권을 ${seatName(sel.value)}(으)로 옮길까요?`)) { sel.value = a.seat_id; return; }
+    const { error } = await sb.from('angel_passes').update({ seat_id: sel.value }).eq('id', a.id).eq('status', 'active');
+    if (error) { sel.value = a.seat_id; return toast(error.message); }
+    a.seat_id = sel.value; renderAngels(); toast('옮겼습니다.');
+  }));
+  $$('[data-agcancel]').forEach((b) => (b.onclick = () => {
+    const a = byId(b.dataset.agcancel);
+    askAngelPw('👼 발동권 취소', `${esc(seatName(a.seat_id))}의 수호천사 발동권(보호 ${a.minutes}분)을 취소할까요?<br>발행할 때 정한 비밀번호가 필요해요.`, async (pw) => {
+      const { data, error } = await sb.rpc('cancel_angel', { p_id: a.id, p_password: pw });
+      if (error) return error.message;
+      if (!data?.ok) return data?.error || '취소하지 못했습니다.';
+      a.status = 'canceled'; renderAngels(); renderModal(); toast('발동권을 취소했습니다.');
+    });
+  }));
+  $$('[data-agoff]').forEach((b) => (b.onclick = () => releaseAngel(byId(b.dataset.agoff))));
+  $$('[data-agdel]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 발동권 기록을 삭제할까요?')) return;
+    const { error } = await sb.from('angel_passes').delete().eq('id', b.dataset.agdel);
+    if (error) return toast(error.message);
+    S.angels = S.angels.filter((a) => String(a.id) !== String(b.dataset.agdel)); renderAngels();
   }));
 }
 

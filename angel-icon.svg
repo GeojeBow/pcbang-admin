@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 10 360 250" class="angel-icon">
+<style>
+  .wl{transform-origin:100px 130px;animation:flapL .55s ease-in-out infinite alternate}
+  .wr{transform-origin:200px 130px;animation:flapR .55s ease-in-out infinite alternate}
+  @keyframes flapL{from{transform:rotate(12deg)}to{transform:rotate(-10deg)}}
+  @keyframes flapR{from{transform:rotate(-12deg)}to{transform:rotate(10deg)}}
+  .halo{animation:halo 1.4s ease-in-out infinite alternate}
+  @keyframes halo{from{opacity:.75;transform:translateY(2px)}to{opacity:1;transform:translateY(-4px)}}
+  .big,.buddy{animation:bob 1.8s ease-in-out infinite alternate}
+  .buddy{animation-delay:-.9s}
+  @keyframes bob{from{transform:translateY(6px)}to{transform:translateY(-8px)}}
+  .shadow{transform-box:fill-box;transform-origin:center;animation:shd 1.8s ease-in-out infinite alternate}
+  @keyframes shd{from{transform:scale(1.1)}to{transform:scale(.8);opacity:.45}}
+  .mini{animation:floaty 2.2s ease-in-out infinite alternate}
+  .m2{animation-delay:-.4s}.m3{animation-delay:-.8s}.m4{animation-delay:-1.2s}.m5{animation-delay:-1.6s}.m6{animation-delay:-.6s}.m7{animation-delay:-1s}.m8{animation-delay:-1.4s}
+  @keyframes floaty{from{transform:translate(-6px,6px) rotate(-6deg)}to{transform:translate(6px,-8px) rotate(6deg)}}
+  .rays{transform-origin:250px 180px;animation:spin 24s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tw,.hrt{transform-box:fill-box;transform-origin:center;animation:tw 1.1s ease-in-out infinite alternate}
+  .hrt{animation-duration:.7s}.h2{animation-delay:-.35s}
+  @keyframes tw{from{transform:scale(.55);opacity:.5}to{transform:scale(1.15);opacity:1}}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+<defs>
+  <radialGradient id="gBody" cx="42%" cy="36%" r="70%"><stop offset="0" stop-color="#ffe4ef"/><stop offset=".6" stop-color="#ffb8d2"/><stop offset="1" stop-color="#f58fb6"/></radialGradient>
+  <linearGradient id="gPrim" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f3ecff"/><stop offset="1" stop-color="#ffc6e3"/></linearGradient>
+  <linearGradient id="gSec" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e0e7ff"/></linearGradient>
+  <linearGradient id="gCov" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#fff1f8"/></linearGradient>
+  <radialGradient id="gFur" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#c98a55"/><stop offset="1" stop-color="#9a5f34"/></radialGradient>
+  <linearGradient id="gHalo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff6b0"/><stop offset=".45" stop-color="#facc15"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+  <radialGradient id="gGlow"><stop offset="0" stop-color="#fff7c2" stop-opacity=".95"/><stop offset=".5" stop-color="#fde68a" stop-opacity=".35"/><stop offset="1" stop-color="#fde68a" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gFade2" gradientUnits="userSpaceOnUse" cx="250" cy="180" r="250"><stop offset=".3" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+  <radialGradient id="gFade"><stop offset=".35" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+  <mask id="mRays" maskUnits="userSpaceOnUse" x="0" y="0" width="500" height="360"><rect width="500" height="360" fill="url(#gFade2)"/></mask>
+  <filter id="fGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <g id="aWings">
+    <g class="wl"><path d="M100 108 C70 72 10 62 4 92 C0 107 15 114 25 116 C8 122 8 142 30 144 C18 154 30 170 52 164 C62 177 86 172 95 157 Z" fill="#ffffff" stroke="#e5e7eb" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M30 118 C50 120 70 126 90 136 M44 146 C60 146 76 148 92 150" fill="none" stroke="#e8edf5" stroke-width="3" stroke-linecap="round"/></g>
+    <g class="wr"><path d="M200 108 C230 72 290 62 296 92 C300 107 285 114 275 116 C292 122 292 142 270 144 C282 154 270 170 248 164 C238 177 214 172 205 157 Z" fill="#ffffff" stroke="#e5e7eb" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M270 118 C250 120 230 126 210 136 M256 146 C240 146 224 148 208 150" fill="none" stroke="#e8edf5" stroke-width="3" stroke-linecap="round"/></g>
+  </g>
+  <g id="aHalo">
+    <g class="halo"><ellipse cx="150" cy="30" rx="36" ry="9" fill="none" stroke="#fcd34d" stroke-width="7"/><ellipse cx="150" cy="30" rx="36" ry="9" fill="none" stroke="#fef3c7" stroke-width="1.6" opacity=".9"/></g>
+  </g>
+  <symbol id="angelPig" viewBox="0 0 300 260" overflow="visible">
+    <ellipse class="shadow" cx="150" cy="252" rx="46" ry="7" fill="#f9a8c8" opacity=".75"/>
+    <use href="#aWings"/>
+    <path d="M100 66 L92 40 Q90 30 100 32 L128 50 Z" fill="#f7b4cc"/><path d="M200 66 L208 40 Q210 30 200 32 L172 50 Z" fill="#f7b4cc"/>
+    <path d="M104 58 L100 42 L118 52 Z" fill="#ec7fa6"/><path d="M196 58 L200 42 L182 52 Z" fill="#ec7fa6"/>
+    <path d="M150 44 C186 44 208 66 208 100 L208 200 Q208 222 188 222 L112 222 Q92 222 92 200 L92 100 C92 66 114 44 150 44 Z" fill="#f9c0d4"/>
+    <path d="M92 176 Q120 168 150 182 Q180 168 208 176 L208 200 Q208 222 188 222 L112 222 Q92 222 92 200 Z" fill="#ef8fb2"/>
+    <rect x="106" y="210" width="30" height="30" rx="10" fill="#f9c0d4"/><rect x="164" y="210" width="30" height="30" rx="10" fill="#f9c0d4"/>
+    <rect x="106" y="232" width="30" height="8" rx="4" fill="#ec7fa6"/><rect x="164" y="232" width="30" height="8" rx="4" fill="#ec7fa6"/>
+    <path d="M114 168 Q114 150 128 150 Q140 150 140 168" fill="#fbd3e1" stroke="#ec9dbb" stroke-width="2"/><path d="M160 168 Q160 150 172 150 Q186 150 186 168" fill="#fbd3e1" stroke="#ec9dbb" stroke-width="2"/>
+    <ellipse cx="150" cy="60" rx="20" ry="5" fill="#fff" opacity=".85"/>
+    <circle cx="124" cy="96" r="7" fill="#1f1720"/><circle cx="176" cy="96" r="7" fill="#1f1720"/>
+    <circle cx="126" cy="93" r="2" fill="#fff"/><circle cx="178" cy="93" r="2" fill="#fff"/>
+    <ellipse cx="110" cy="118" rx="9" ry="5" fill="#f27aa5" opacity=".45"/><ellipse cx="190" cy="118" rx="9" ry="5" fill="#f27aa5" opacity=".45"/>
+    <ellipse cx="150" cy="122" rx="26" ry="19" fill="#ef8fb2"/>
+    <ellipse cx="141" cy="122" rx="4.5" ry="8" fill="#9d2f5c"/><ellipse cx="159" cy="122" rx="4.5" ry="8" fill="#9d2f5c"/>
+    <path d="M140 148 Q150 154 160 148" fill="none" stroke="#c2507e" stroke-width="2.5" stroke-linecap="round"/>
+    <use href="#aHalo"/>
+  </symbol>
+  <symbol id="angelMonkey" viewBox="0 0 300 260" overflow="visible">
+    <ellipse class="shadow" cx="150" cy="252" rx="46" ry="7" fill="#d6b48f" opacity=".7"/>
+    <use href="#aWings"/>
+    <path d="M206 196 C246 200 252 160 230 152 C214 146 208 168 222 172" fill="none" stroke="#9a6236" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="90" cy="100" r="22" fill="#a86b3c"/><circle cx="90" cy="100" r="13" fill="#f2c9a0"/>
+    <circle cx="210" cy="100" r="22" fill="#a86b3c"/><circle cx="210" cy="100" r="13" fill="#f2c9a0"/>
+    <path d="M150 44 C186 44 206 66 206 100 L206 200 Q206 222 186 222 L114 222 Q94 222 94 200 L94 100 C94 66 114 44 150 44 Z" fill="#b5763f"/>
+    <path d="M150 74 C136 60 106 66 108 96 C108 112 112 132 124 142 C136 152 164 152 176 142 C188 132 192 112 192 96 C194 66 164 60 150 74 Z" fill="#f4d2ad"/>
+    <path d="M118 222 L118 186 Q150 164 182 186 L182 222 Z" fill="#f4d2ad"/>
+    <rect x="106" y="210" width="30" height="30" rx="10" fill="#b5763f"/><rect x="164" y="210" width="30" height="30" rx="10" fill="#b5763f"/>
+    <rect x="106" y="232" width="30" height="8" rx="4" fill="#8a5428"/><rect x="164" y="232" width="30" height="8" rx="4" fill="#8a5428"/>
+    <path d="M100 166 Q100 148 114 150 Q124 152 122 170" fill="#c98a52"/><path d="M200 166 Q200 148 186 150 Q176 152 178 170" fill="#c98a52"/>
+    <path d="M140 46 Q146 30 156 40 Q160 30 166 44" fill="none" stroke="#b5763f" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="150" cy="58" rx="18" ry="4.5" fill="#fff" opacity=".35"/>
+    <circle cx="130" cy="98" r="7" fill="#1f1720"/><circle cx="170" cy="98" r="7" fill="#1f1720"/>
+    <circle cx="132" cy="95" r="2" fill="#fff"/><circle cx="172" cy="95" r="2" fill="#fff"/>
+    <ellipse cx="116" cy="120" rx="8" ry="5" fill="#f27aa5" opacity=".4"/><ellipse cx="184" cy="120" rx="8" ry="5" fill="#f27aa5" opacity=".4"/>
+    <ellipse cx="144" cy="116" rx="2.6" ry="2.2" fill="#6b3d1c"/><ellipse cx="156" cy="116" rx="2.6" ry="2.2" fill="#6b3d1c"/>
+    <path d="M134 126 Q150 142 166 126" fill="#e2566f" stroke="#6b3d1c" stroke-width="2.5" stroke-linejoin="round"/>
+    <use href="#aHalo"/>
+  </symbol>
+</defs><circle cx="150" cy="140" r="120" fill="url(#gGlow)"/><use href="#angelPig" width="300" height="260"/><use href="#angelMonkey" x="190" y="120" width="130" height="113"/></svg>

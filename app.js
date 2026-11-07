@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.7.0';
-const APP_UPDATED = '2026-11-08 06:40';
+const APP_VERSION = '1.7.1';
+const APP_UPDATED = '2026-11-08 06:58';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -890,8 +890,8 @@ function dur(sec) {
   return [h ? `${h}시간` : '', m ? `${m}분` : ''].filter(Boolean).join(' ') || '0분';
 }
 const hShort = (sec) => (sec >= 3600 ? `${(sec / 3600).toFixed(sec >= 36000 ? 0 : 1)}h` : `${Math.round(sec / 60)}m`);
-const UG_REASON = { time_up: '시간을 다 씀', admin_lock: '관리자가 잠금', admin_end: '관리자가 사용 종료', power: 'PC 끔', sleep: '절전', lost: '갑자기 꺼짐', quit: '프로그램 종료', lock: '잠김' };
-const UG_OFF = { shutdown: '정상 종료', restart: '다시 시작', sleep: '절전', lost: '갑자기 꺼짐 (전원·강제 종료)', quit: '프로그램 종료' };
+const UG_REASON = { time_up: '시간을 다 씀', admin_lock: '관리자가 잠금', admin_end: '관리자가 사용 종료', power: 'PC 끔', sleep: '절전', lost: '갑자기 꺼짐', forced: '강제 종료 → PC 꺼짐', quit: '프로그램 종료', lock: '잠김' };
+const UG_OFF = { shutdown: '정상 종료', restart: '다시 시작', sleep: '절전', lost: '갑자기 꺼짐 (전원·강제 종료)', forced: '강제 종료 → PC 꺼짐', quit: '프로그램 종료' };
 const fresh = (t) => Date.now() - new Date(t).getTime() < 3 * 60_000; // 1분마다 갱신되므로 3분 안이면 아직 진행 중
 const sessLive = (s) => !s.ended_at && fresh(s.last_seen);
 const powerOn = (p) => !p.off_at && fresh(p.last_seen);

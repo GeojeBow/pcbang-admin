@@ -110,7 +110,8 @@
           <div class="cp-hint">아이가 <b>남은 시간 5분 미만</b>일 때 발동하면, 보호 시간만큼 시간이 늘고 그동안 <b>잠금·사용 종료·끄기·재시작·시간 빼기</b>가 막혀요. PC마다 하루 1번만 쓸 수 있어요.<br>
             보호를 중간에 풀거나 안 쓴 권을 취소하려면 <b>이 권의 비밀번호</b>가 필요해요. 비밀번호는 아이 PC에는 절대 보내지 않아요. 잊어버려도 보호 시간이 끝나면 저절로 풀립니다.</div>
           <div class="cp-form">
-            <select id="agSeat"></select>
+            <div class="ag-pick"><div class="ag-pick-h"><span>받을 아이 PC <b id="agSelCount"></b></span><button type="button" class="btn small" id="agAll">전체 선택</button></div>
+              <div class="ag-seats" id="agSeats"></div></div>
             <label class="cp-min"><input type="number" id="agMin" inputmode="numeric" min="5" max="60" value="15"><span>분 보호</span></label>
             <div class="cp-quick"><button class="btn small" data-agmin="10">10분</button><button class="btn small" data-agmin="15">15분</button><button class="btn small" data-agmin="20">20분</button><button class="btn small" data-agmin="30">30분</button></div>
             <input id="agPw" type="password" maxlength="40" placeholder="해제 비밀번호 (4자 이상)" autocomplete="new-password">

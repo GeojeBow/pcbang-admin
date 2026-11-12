@@ -245,3 +245,12 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .ag-form input { flex: 1; }
 .ag-err { color: #dc2626; text-align: center; min-height: 20px; font-size: 14px; }
 @media (prefers-color-scheme: dark) { .ag-issue { background: linear-gradient(135deg, #3b0764, var(--card)); } }
+
+.ag-pick { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--card); }
+.ag-pick-h { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.ag-pick-h b { color: #a21caf; }
+.ag-seats { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-seat { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: 2px solid var(--line); font-weight: 700; font-size: 14px; cursor: pointer; user-select: none; }
+.ag-seat input { width: 18px; height: 18px; margin: 0; accent-color: #a855f7; }
+.ag-seat.on { border-color: #c084fc; background: #faf5ff; color: #86198f; }
+@media (prefers-color-scheme: dark) { .ag-seat.on { background: #3b0764; color: #f5d0fe; } }

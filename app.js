@@ -3,8 +3,8 @@
 const { createClient } = window.supabase;
 
 // 화면 버전 (업데이트할 때마다 올린다)
-const APP_VERSION = '1.7.1';
-const APP_UPDATED = '2026-11-08 06:58';
+const APP_VERSION = '1.7.2';
+const APP_UPDATED = '2026-11-13 06:50';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -789,12 +789,30 @@ $$('[data-agmin]').forEach((b) => (b.onclick = () => { $('#agMin').value = b.dat
 $('#agFilter').onchange = renderAngels;
 $('#mGiveAngel').onclick = () => {
   const id = S.openSeat; closeSeat(); showTab('angels');
-  renderAngels(); $('#agSeat').value = id; $('#agPw').focus();
+  agSel.clear(); agSel.add(id); renderAngels(); $('#agPw').focus();
 };
+// 받을 PC 여러 대 선택 (전체 선택 가능)
+const agSel = new Set();
+$('#agAll').onclick = () => {
+  const ids = sortedSeats().map((s) => s.id);
+  const all = ids.length && ids.every((id) => agSel.has(id));
+  agSel.clear(); if (!all) ids.forEach((id) => agSel.add(id));
+  renderAgSeats();
+};
+function renderAgSeats() {
+  const seats = sortedSeats();
+  for (const id of [...agSel]) if (!S.seats.has(id)) agSel.delete(id);
+  $('#agSeats').innerHTML = seats.map((s) => `<label class="ag-seat ${agSel.has(s.id) ? 'on' : ''}"><input type="checkbox" data-agpick="${s.id}" ${agSel.has(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('')
+    || '<span class="meta">등록된 PC가 없습니다.</span>';
+  $$('[data-agpick]').forEach((c) => (c.onchange = () => { c.checked ? agSel.add(c.dataset.agpick) : agSel.delete(c.dataset.agpick); renderAgSeats(); }));
+  const all = seats.length && seats.every((s) => agSel.has(s.id));
+  $('#agAll').textContent = all ? '전체 해제' : '전체 선택';
+  $('#agSelCount').textContent = agSel.size ? `${agSel.size}대 선택` : '';
+}
 $('#agGive').onclick = async () => {
   if (!S.angels) return toast('수호천사 기능을 쓰려면 Supabase에서 수호천사 SQL을 먼저 실행해야 합니다.', 'call');
-  const seat = $('#agSeat').value;
-  if (!seat) return toast('발동권을 줄 PC를 고르세요.');
+  const seats = sortedSeats().filter((s) => agSel.has(s.id)).map((s) => s.id);
+  if (!seats.length) return toast('발동권을 줄 PC를 고르세요. (여러 대 또는 전체 선택 가능)');
   const minutes = parseInt($('#agMin').value, 10) || 0;
   if (minutes < 5 || minutes > 60) { toast('보호 시간은 5~60분으로 정해 주세요.'); return $('#agMin').focus(); }
   const pw = $('#agPw').value;
@@ -803,22 +821,29 @@ $('#agGive').onclick = async () => {
   const count = Math.min(10, Math.max(1, parseInt($('#agCount').value, 10) || 1));
   const days = Number($('#agExp').value) || 0;
   const holder = $('#agHolder').value.trim() || null, note = $('#agNote').value.trim() || null;
-  if (!confirm(`${seatName(seat)}에 수호천사 발동권(보호 ${minutes}분) ${count}장을 줄까요?\n비밀번호를 꼭 기억해 두세요. 비밀번호를 아는 사람만 보호를 풀 수 있어요.`)) return;
+  const names = seats.map(seatName).join(', ');
+  if (!confirm(`${seats.length > 1 ? `${seats.length}대(${names})에 각각` : `${names}에`} 수호천사 발동권(보호 ${minutes}분) ${count}장을 줄까요?\n비밀번호를 꼭 기억해 두세요. 비밀번호를 아는 사람만 보호를 풀 수 있어요.`)) return;
   $('#agGive').disabled = true;
-  const { data, error } = await sb.rpc('issue_angel', { p_seat: seat, p_minutes: minutes, p_password: pw, p_count: count, p_holder: holder, p_note: note,
-    p_expires: days ? new Date(Date.now() + days * 86400_000).toISOString() : null });
+  const expires = days ? new Date(Date.now() + days * 86400_000).toISOString() : null;
+  const done = [], failed = [];
+  for (const seat of seats) {
+    const { data, error } = await sb.rpc('issue_angel', { p_seat: seat, p_minutes: minutes, p_password: pw, p_count: count, p_holder: holder, p_note: note, p_expires: expires });
+    if (error || !data?.ok) failed.push(`${seatName(seat)}: ${error?.message || data?.error || '실패'}`);
+    else done.push(seat);
+  }
   $('#agGive').disabled = false;
-  if (error) return toast('실패: ' + error.message, 'timeout');
-  if (!data?.ok) return toast(data?.error || '실패했습니다.', 'timeout');
+  if (!done.length) return toast('실패: ' + failed.join(' / '), 'timeout');
   const ag = await sb.from('angel_passes').select('*').order('created_at', { ascending: false }).limit(300);
   if (!ag.error) S.angels = ag.data || [];
   for (const k of ['agPw', 'agPw2', 'agHolder', 'agNote']) $('#' + k).value = '';
   $('#agCount').value = 1; $('#agFilter').value = 'active';
-  renderAngels(); renderModal(); toast(`👼 ${seatName(seat)}에 수호천사 발동권 ${data.ids.length}장을 넣었습니다.`);
+  agSel.clear();
+  renderAngels(); renderModal();
+  toast(`👼 ${done.length > 1 ? `${done.length}대에 각각` : `${seatName(done[0])}에`} 수호천사 발동권 ${count}장을 넣었습니다.`);
+  if (failed.length) toast('일부 실패: ' + failed.join(' / '), 'timeout');
 };
 function renderAngels() {
-  const keep = $('#agSeat').value;
-  $('#agSeat').innerHTML = '<option value="">받을 아이 PC 선택</option>' + seatOptions(keep);
+  renderAgSeats();
   const box = $('#agList');
   if (!S.angels) {
     $('#agSummary').textContent = '';

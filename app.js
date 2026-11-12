@@ -499,8 +499,19 @@ async function sendChat(seatId, input) {
   if (error) return toast('전송 실패: ' + error.message);
   pushMsg(data); renderModal(); renderChats();
 }
-$('#mChatForm').onsubmit = (e) => { e.preventDefault(); sendChat(S.openSeat, $('#mChatText')); };
-$('#cChatForm').onsubmit = (e) => { e.preventDefault(); sendChat(S.openChat, $('#cChatText')); };
+// 보내고 나서도 입력칸에 포커스를 유지해 핸드폰 자판이 내려가지 않게 한다
+function chatForm(form, input, seatOf) {
+  const btn = form.querySelector('button');
+  // 보내기 버튼을 눌러도 입력칸이 포커스를 잃지 않게 (잃으면 자판이 닫힘)
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true }));
+  }, { passive: false });
+  form.onsubmit = (e) => { e.preventDefault(); input.focus(); sendChat(seatOf(), input); };
+}
+chatForm($('#mChatForm'), $('#mChatText'), () => S.openSeat);
+chatForm($('#cChatForm'), $('#cChatText'), () => S.openChat);
 
 function openChat(id) {
   S.openChat = id;
